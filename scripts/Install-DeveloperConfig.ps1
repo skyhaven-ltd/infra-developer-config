@@ -12,11 +12,13 @@
     falls back to copying files and prints a reminder to re-run this script after
     each git pull.
 
-    Skills are sourced from this repository's skills/ directory. Claude receives
-    a single skills junction. Codex receives per-skill junctions under
-    ~/.codex/skills so Codex-managed system skills under ~/.codex/skills/.system
-    are preserved. The legacy ~/.agents/skills junction is removed only when it
-    points at this repo's skills directory.
+    Skills are sourced from this repository's skills/ directory. The repo may
+    group skills by purpose, but any descendant directory containing SKILL.md is
+    installed flat into ~/.claude/skills and ~/.codex/skills. Per-skill
+    junctions are preferred; if junction creation fails, the skill directory is
+    copied and marked as managed. Codex-managed system skills under
+    ~/.codex/skills/.system are preserved. The legacy ~/.agents/skills junction
+    is removed only when it points at this repo's skills directory.
 
 .PARAMETER Repo
     Absolute path to the ops-developer-config repository root.
@@ -132,15 +134,15 @@ function Remove-DirectoryReparsePoint {
     [System.IO.Directory]::Delete($Path)
 }
 
-function Initialize-CodexSkillsDirectory {
-    param([string]$Path, [string]$RepoSkills)
+function Initialize-SkillsDirectory {
+    param([string]$Path, [string]$RepoSkills, [string]$ToolName)
     $item = Get-Item -LiteralPath $Path -ErrorAction SilentlyContinue
     if ($item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
         if (Test-ReparseTarget $Path $RepoSkills) {
             Remove-DirectoryReparsePoint $Path
             Write-Host "  [remove] $Path legacy whole-directory junction" -ForegroundColor Yellow
         } else {
-            Write-Host "  [warn] $Path is linked elsewhere; leaving Codex skills unchanged" -ForegroundColor Yellow
+            Write-Host "  [warn] $Path is linked elsewhere; leaving $ToolName skills unchanged" -ForegroundColor Yellow
             return $false
         }
     }
@@ -149,14 +151,107 @@ function Initialize-CodexSkillsDirectory {
     return $true
 }
 
-function New-CodexSkillJunctions {
-    param([string]$CodexSkills, [string]$RepoSkills)
-    if (-not (Initialize-CodexSkillsDirectory $CodexSkills $RepoSkills)) {
+function Get-RepoSkills {
+    param([string]$RepoSkills)
+
+    $skills = Get-ChildItem -LiteralPath $RepoSkills -Recurse -Directory |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "SKILL.md") } |
+        Sort-Object -Property Name
+
+    $duplicates = $skills |
+        Group-Object -Property Name |
+        Where-Object { $_.Count -gt 1 }
+
+    if ($duplicates) {
+        $names = ($duplicates | ForEach-Object { $_.Name }) -join ", "
+        throw "Duplicate skill folder name(s) found under $RepoSkills`: $names"
+    }
+
+    return $skills
+}
+
+function Test-PathIsUnder {
+    param([string]$Path, [string]$Parent)
+
+    $candidate = (ConvertTo-ComparablePath $Path).TrimEnd("\")
+    $root = (ConvertTo-ComparablePath $Parent).TrimEnd("\")
+    return $candidate.StartsWith("$root\", [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Remove-StaleManagedSkills {
+    param([string]$SkillsRoot, [string]$RepoSkills, [object[]]$Skills)
+
+    $expectedNames = @{}
+    $Skills | ForEach-Object { $expectedNames[$_.Name] = $true }
+
+    Get-ChildItem -LiteralPath $SkillsRoot -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.Name -ne ".system") {
+            $managedMarker = Join-Path $_.FullName ".managed-by-ops-developer-config"
+            $isExpected = $expectedNames.ContainsKey($_.Name)
+            $isReparse = $_.Attributes -band [System.IO.FileAttributes]::ReparsePoint
+
+            if ($isReparse) {
+                $targets = @(@($_.Target) | Where-Object { $_ })
+                $pointsIntoRepoSkills = $targets | Where-Object { Test-PathIsUnder $_ $RepoSkills }
+
+                if ($pointsIntoRepoSkills -and ((-not $isExpected) -or (-not (Test-Path -LiteralPath ($targets[0]))))) {
+                    Remove-DirectoryReparsePoint $_.FullName
+                    Write-Host "  [remove] $($_.FullName) stale managed skill" -ForegroundColor Yellow
+                }
+            } elseif ((Test-Path -LiteralPath $managedMarker) -and (-not $isExpected)) {
+                Remove-Item -LiteralPath $_.FullName -Recurse -Force
+                Write-Host "  [remove] $($_.FullName) stale managed skill copy" -ForegroundColor Yellow
+            }
+        }
+    }
+}
+
+function Install-Skill {
+    param([string]$Source, [string]$Destination)
+
+    $managedMarker = Join-Path $Destination ".managed-by-ops-developer-config"
+    $item = Get-Item -LiteralPath $Destination -ErrorAction SilentlyContinue
+
+    if ($item) {
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            if (Test-ReparseTarget $Destination $Source) {
+                Write-Host "  [skip] $Destination already linked" -ForegroundColor DarkGray
+                return
+            }
+
+            Remove-DirectoryReparsePoint $Destination
+        } elseif (Test-Path -LiteralPath $managedMarker) {
+            Remove-Item -LiteralPath $Destination -Recurse -Force
+        } else {
+            Write-Host "  [skip] $Destination exists and is not managed" -ForegroundColor Yellow
+            return
+        }
+    }
+
+    New-Item -ItemType Directory -Path (Split-Path $Destination) -Force | Out-Null
+
+    try {
+        New-Item -ItemType Junction -Path $Destination -Target $Source -ErrorAction Stop | Out-Null
+        Write-Host "  [junction] $Destination -> $Source" -ForegroundColor Green
+    } catch {
+        Copy-Item -LiteralPath $Source -Destination $Destination -Recurse -Force
+        New-Item -ItemType File -Path $managedMarker -Force | Out-Null
+        Write-Host "  [copy]     $Destination <- $Source" -ForegroundColor Cyan
+        $script:copyFallback++
+    }
+}
+
+function Install-Skills {
+    param([string]$SkillsRoot, [string]$RepoSkills, [string]$ToolName, [object[]]$Skills)
+
+    if (-not (Initialize-SkillsDirectory $SkillsRoot $RepoSkills $ToolName)) {
         return
     }
 
-    Get-ChildItem -LiteralPath $RepoSkills -Directory | ForEach-Object {
-        New-Junction "$CodexSkills\$($_.Name)" $_.FullName
+    Remove-StaleManagedSkills $SkillsRoot $RepoSkills $Skills
+
+    $Skills | ForEach-Object {
+        Install-Skill $_.FullName (Join-Path $SkillsRoot $_.Name)
     }
 }
 
@@ -284,8 +379,10 @@ if (-not $canSymlink) {
 Write-Host "`nSkills" -ForegroundColor Cyan
 $claude = "$env:USERPROFILE\.claude"
 $codex = "$env:USERPROFILE\.codex"
-New-Junction "$claude\skills" "$Repo\skills"
-New-CodexSkillJunctions "$codex\skills" "$Repo\skills"
+$repoSkills = "$Repo\skills"
+$skills = @(Get-RepoSkills $repoSkills)
+Install-Skills "$claude\skills" $repoSkills "Claude" $skills
+Install-Skills "$codex\skills" $repoSkills "Codex" $skills
 Remove-LegacyAgentsSkillsJunction "$env:USERPROFILE\.agents\skills" "$Repo\skills"
 
 # -- Claude ----------------------------------------------------------------
