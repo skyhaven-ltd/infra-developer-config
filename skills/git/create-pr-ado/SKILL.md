@@ -3,84 +3,38 @@ name: create-pr-ado
 description: Create an Azure DevOps pull request for the current branch
 ---
 
-PR templates live in the `liam-goodchild/.github` repo at `.github/PULL_REQUEST_TEMPLATE/`.
+Use the bundled Python helper for deterministic branch, default branch, existing PR, work item, shared pull request template, and diff-stat checks. Use the LLM only for judgement: deriving the concise PR title/description from the diff and asking when the branch prefix is unclear.
 
-1. `git branch --show-current` + `az repos show --query defaultBranch -o tsv | sed 's|refs/heads/||'`. If on default branch, STOP.
+## Workflow
 
-2. Check existing PR: `az repos pr list --source-branch $(git branch --show-current) --status active`. If exists → output URL, STOP.
+1. Inspect the current repository:
 
-3. Push if needed: if `git log origin/{branch}..HEAD` shows unpushed commits → `git push origin HEAD`.
-
-4. Map branch prefix → title prefix + template. If branch has work item number (e.g. `feature/12345-thing`) → `--work-items 12345`.
-
-   | Branch prefix | Title prefix | Template |
-   |---|---|---|
-   | `feature/` | `[FEATURE]` | `feature.md` |
-   | `major/` / `breaking/` | `[MAJOR]` | `feature.md` |
-   | `fix/` / `hotfix/` / `bug/` | `[PATCH]` | `bug_fix.md` |
-   | `minor/` / `patch/` / `chore/` / `docs/` | `[MINOR]` | `maintenance.md` |
-
-   If unclear, ask.
-
-5. `git diff {default}...HEAD` → derive brief title (<60 chars after prefix).
-
-6. Fill the selected template body with content derived from the diff:
-
-   **feature.md**
-   ```
-   **What does this PR do?**
-   <description>
-
-   **Related issue**
-   Closes #
-
-   **Testing done**
-   <testing>
-
-   **Checklist**
-   - [ ] Code follows project conventions
-   - [ ] No secrets or credentials included
+   ```powershell
+   python "<skill-dir>\scripts\create-pr-ado-helper.py" inspect --target "." --json
    ```
 
-   **bug_fix.md**
-   ```
-   **What is the bug?**
-   <description>
+2. Stop if `on_default_branch` is true or `existing_pull_requests` is non-empty. Ask if `branch_prefix_unclear` appears in `risk_flags`.
 
-   **Root cause**
-   <root cause>
+3. Use `branch_mapping` and `pull_request_template` to draft a PR title and description. Only use the shared template at `.github/.github/PULL_REQUEST_TEMPLATE/pull-request.md`; do not invent or use embedded PR templates. The PR title prefix must be `branch_mapping.title_prefix`, which is derived from the uppercase branch type (`patch/foo` -> `[PATCH]`, `minor/foo` -> `[MINOR]`, `chore/foo` -> `[CHORE]`). If the branch contains a work item number, include it in `work_items`.
 
-   **Related issue**
-   Fixes #
+4. Create an approved plan outside the repo:
 
-   **Testing done**
-   <testing>
-
-   **Checklist**
-   - [ ] Root cause identified and addressed
-   - [ ] No secrets or credentials included
+   ```json
+   {
+     "ado": { "org": "CloudAandE", "project": "Project", "repo": "repo" },
+     "target_branch": "main",
+     "title": "[PATCH] - Short title",
+     "description": "Markdown PR body",
+     "work_items": [],
+     "approved": true
+   }
    ```
 
-   **maintenance.md**
-   ```
-   **What does this PR change?**
-   <description>
+5. Dry-run, then create:
 
-   **Why?**
-   <reason>
-
-   **Related issue**
-   Closes # (if applicable)
-
-   **Checklist**
-   - [ ] No functional behaviour changed
-   - [ ] No secrets or credentials included
+   ```powershell
+   python "<skill-dir>\scripts\create-pr-ado-helper.py" apply --target "." --plan "$env:TEMP\pr-ado.json" --dry-run
+   python "<skill-dir>\scripts\create-pr-ado-helper.py" apply --target "." --plan "$env:TEMP\pr-ado.json"
    ```
 
-7. Create PR:
-
-```
-az repos pr create --target-branch {default} --title "<PREFIX> - <title>" --description "<filled template body>"
-```
-
-8. Extract `pullRequestId`, `repository.name`, `repository.project.name` from response. Output URL: `https://dev.azure.com/CloudAandE/{project}/_git/{repo}/pullrequest/{id}`
+6. Report the returned PR URL.

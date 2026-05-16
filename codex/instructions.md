@@ -15,7 +15,7 @@ security, and simplicity — in that order.
   applying and explain the plan before making changes.
 - For shell scripts, use `set -euo pipefail` and quote all variable expansions.
 - Do not run destructive commands (`rm -rf`, `az group delete`, `terraform
-  destroy`) without explicit confirmation.
+destroy`) without explicit confirmation.
 - Prefer idempotent operations.
 
 ## Style

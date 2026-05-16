@@ -3,84 +3,37 @@ name: create-pr-gh
 description: Create a GitHub pull request for the current branch
 ---
 
-PR templates live in the `liam-goodchild/.github` repo at `.github/PULL_REQUEST_TEMPLATE/`.
+Use the bundled Python helper for deterministic branch, default branch, existing PR, shared pull request template, and diff-stat checks. Use the LLM only for judgement: deriving the concise PR title/body from the diff and asking when the branch prefix is unclear.
 
-1. `git branch --show-current` + `gh api repos/{owner}/{repo} --jq .default_branch`. If on default branch, STOP.
+## Workflow
 
-2. Check existing PR: `gh pr list --head $(git branch --show-current) --state open`. If exists → output URL, STOP.
+1. Inspect the current repository:
 
-3. Push if needed: if `git log origin/{branch}..HEAD` shows unpushed commits → `git push origin HEAD`.
-
-4. Map branch prefix → title prefix + template:
-
-   | Branch prefix | Title prefix | Template |
-   |---|---|---|
-   | `feature/` | `[FEATURE]` | `feature.md` |
-   | `major/` / `breaking/` | `[MAJOR]` | `feature.md` |
-   | `fix/` / `hotfix/` / `bug/` | `[PATCH]` | `bug_fix.md` |
-   | `minor/` / `patch/` / `chore/` / `docs/` | `[MINOR]` | `maintenance.md` |
-
-   If unclear, ask.
-
-5. `git diff {default}...HEAD` → derive brief title (<60 chars after prefix).
-
-6. Fill the selected template body with content derived from the diff:
-
-   **feature.md**
-   ```
-   **What does this PR do?**
-   <description>
-
-   **Related issue**
-   Closes #
-
-   **Testing done**
-   <testing>
-
-   **Checklist**
-   - [ ] Code follows project conventions
-   - [ ] No secrets or credentials included
+   ```powershell
+   python "<skill-dir>\scripts\create-pr-gh-helper.py" inspect --target "." --json
    ```
 
-   **bug_fix.md**
-   ```
-   **What is the bug?**
-   <description>
+2. Stop if `on_default_branch` is true or `existing_pull_requests` is non-empty. Ask if `branch_prefix_unclear` appears in `risk_flags`.
 
-   **Root cause**
-   <root cause>
+3. Use `branch_mapping` and `pull_request_template` to draft a PR title and body. Only use the shared template at `.github/.github/PULL_REQUEST_TEMPLATE/pull-request.md`; do not invent or use embedded PR templates. Keep the title short and include `branch_mapping.title_prefix`, which is derived from the uppercase branch type (`patch/foo` -> `[PATCH]`, `minor/foo` -> `[MINOR]`, `chore/foo` -> `[CHORE]`).
 
-   **Related issue**
-   Fixes #
+4. Create an approved plan outside the repo:
 
-   **Testing done**
-   <testing>
-
-   **Checklist**
-   - [ ] Root cause identified and addressed
-   - [ ] No secrets or credentials included
+   ```json
+   {
+     "repository": "owner/repo",
+     "base": "main",
+     "title": "[PATCH] - Short title",
+     "body": "Markdown PR body",
+     "approved": true
+   }
    ```
 
-   **maintenance.md**
-   ```
-   **What does this PR change?**
-   <description>
+5. Dry-run, then create:
 
-   **Why?**
-   <reason>
-
-   **Related issue**
-   Closes # (if applicable)
-
-   **Checklist**
-   - [ ] No functional behaviour changed
-   - [ ] No secrets or credentials included
+   ```powershell
+   python "<skill-dir>\scripts\create-pr-gh-helper.py" apply --target "." --plan "$env:TEMP\pr-gh.json" --dry-run
+   python "<skill-dir>\scripts\create-pr-gh-helper.py" apply --target "." --plan "$env:TEMP\pr-gh.json"
    ```
 
-7. Create PR:
-
-```
-gh pr create --base {default} --title "<PREFIX> - <title>" --body "<filled template body>"
-```
-
-8. Output PR URL.
+6. Report `created_pr_url`.

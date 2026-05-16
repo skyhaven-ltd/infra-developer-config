@@ -3,20 +3,21 @@ name: raise-feature
 description: Raise a feature request issue on a GitHub repository using the standard feature template
 ---
 
-Raise a GitHub feature request issue on a repository. Use the bundled Python helper for deterministic checks and execution. Use the LLM only for judgement: understanding the user's request, expanding terse details into meaningful template prose, deciding whether enough information is present, and confirming the exact issue with the user before creation.
+Raise a GitHub feature request issue on a repository. Use the bundled Python helper for deterministic checks, shared issue template loading, and execution. Use the LLM only for judgement: understanding the user's request, expanding terse details into meaningful template prose, deciding whether enough information is present, and confirming the exact issue with the user before creation.
 
 ## Step 1 — Inspect repository and tooling
 
 Run the helper from the current working directory or target repository directory:
 
 ```powershell
-python "C:\Local Files\Repositories\Sky Haven\ops-developer-config\skills\git\raise-feature\scripts\raise_feature_helper.py" inspect --target "." --json
+python "C:\Local Files\Repositories\Sky Haven\ops-developer-config\skills\git\raise-feature\scripts\raise-feature-helper.py" inspect --target "." --json
 ```
 
 Inspect these JSON fields:
 
 - `inferred_repository`: use this if it is correct; otherwise ask for `owner/repo`.
 - `risk_flags`: stop and resolve `repository_not_inferred`, `gh_not_found`, or `gh_not_authenticated` before applying.
+- `issue_template`: the shared template loaded from `.github/.github/ISSUE_TEMPLATE/feature-request.md`. Do not invent or use embedded issue templates.
 - `defaults`: label, assignee, and title prefix used by the helper.
 - `project`: the Sky Haven Project V2 IDs used to set Type to Feature.
 
@@ -64,13 +65,13 @@ Optional plan fields are `label` and `assignee`; defaults are `use-type-field-in
 Dry-run first when practical:
 
 ```powershell
-python "C:\Local Files\Repositories\Sky Haven\ops-developer-config\skills\git\raise-feature\scripts\raise_feature_helper.py" apply --target "." --plan "$env:TEMP\feature-plan.json" --dry-run
+python "C:\Local Files\Repositories\Sky Haven\ops-developer-config\skills\git\raise-feature\scripts\raise-feature-helper.py" apply --target "." --plan "$env:TEMP\feature-plan.json" --dry-run
 ```
 
 After approval and validation, create the issue:
 
 ```powershell
-python "C:\Local Files\Repositories\Sky Haven\ops-developer-config\skills\git\raise-feature\scripts\raise_feature_helper.py" apply --target "." --plan "$env:TEMP\feature-plan.json"
+python "C:\Local Files\Repositories\Sky Haven\ops-developer-config\skills\git\raise-feature\scripts\raise-feature-helper.py" apply --target "." --plan "$env:TEMP\feature-plan.json"
 ```
 
 The helper uses `gh issue create`, adds the created issue to the Sky Haven Project Board, and sets the **Type** field to **Feature** using option ID `c156bb04`.

@@ -12,7 +12,7 @@ Use the bundled Python helper for deterministic checks, staging, commits, and pu
 1. Locate this skill directory, then inspect the target repository:
 
    ```powershell
-   python "<skill-dir>\scripts\git_commit_push.py" inspect --repo "<repo>" --json
+   python "<skill-dir>\scripts\git-commit-push-helper.py" inspect --repo "<repo>" --json
    ```
 
 2. Stop if `has_changes` is `false`.
@@ -34,7 +34,7 @@ Use the bundled Python helper for deterministic checks, staging, commits, and pu
          "message": "Add git commit helper script",
          "files": [
            "skills/git/git-commit-push/SKILL.md",
-           "skills/git/git-commit-push/scripts/git_commit_push.py"
+           "skills/git/git-commit-push/scripts/git-commit-push-helper.py"
          ]
        }
      ]
@@ -44,7 +44,7 @@ Use the bundled Python helper for deterministic checks, staging, commits, and pu
 6. Apply the plan and push:
 
    ```powershell
-   python "<skill-dir>\scripts\git_commit_push.py" apply --repo "<repo>" --plan "<plan.json>"
+   python "<skill-dir>\scripts\git-commit-push-helper.py" apply --repo "<repo>" --plan "<plan.json>"
    ```
 
    If the user explicitly approved `risk_flags`, add `--allow-risk`.
@@ -54,4 +54,3 @@ Use the bundled Python helper for deterministic checks, staging, commits, and pu
 ## Testing only
 
 Use `--dry-run` to validate a plan without changing the repository. Use `--no-push` only in temporary test repositories or when the user explicitly asks not to push.
-

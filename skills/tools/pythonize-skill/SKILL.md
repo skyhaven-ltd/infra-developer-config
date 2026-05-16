@@ -14,28 +14,25 @@ Refactor a target skill so `SKILL.md` becomes a thin orchestration guide and bun
 2. Run the analyzer from this skill:
 
    ```powershell
-   python "<this-skill-dir>\scripts\pythonize_skill.py" analyze --target "<target-skill-dir>" --json
+   python "<this-skill-dir>\scripts\pythonize-skill-helper.py" analyze --target "<target-skill-dir>" --json
    ```
 
 3. Review the analyzer output and define the boundary:
-
    - Move deterministic work to Python: status checks, parsing, validation, grouping heuristics, file discovery, command orchestration, JSON/YAML manipulation, API/CLI wrappers, idempotent writes, and safety gates.
    - Keep judgement in the LLM: user intent, risk acceptance, prose, commit messages, PR descriptions, code review findings, study explanations, architectural trade-offs, and final summaries.
 
 4. If the target skill does not already have an appropriate helper, scaffold one:
 
    ```powershell
-   python "<this-skill-dir>\scripts\pythonize_skill.py" scaffold --target "<target-skill-dir>"
+   python "<this-skill-dir>\scripts\pythonize-skill-helper.py" scaffold --target "<target-skill-dir>"
    ```
 
 5. Implement the target helper script. Prefer this interface:
-
    - `inspect`: side-effect-free; returns compact JSON for the LLM to judge.
    - `plan`: optional; creates or validates a structured plan file.
    - `apply`: performs side effects from an explicit plan; supports `--dry-run` when practical.
 
 6. Update the target `SKILL.md` so it tells future agents:
-
    - which helper command to run first;
    - which JSON fields to inspect;
    - when to stop or ask the user;
@@ -68,13 +65,14 @@ Refactor a target skill so `SKILL.md` becomes a thin orchestration guide and bun
 
 Keep target skills short. A good Python-backed skill usually contains:
 
-```markdown
+````markdown
 Use the bundled Python helper for deterministic checks and execution. Use the LLM only for judgement: <specific judgement tasks>.
 
 1. Run inspect:
    ```powershell
    python "<skill-dir>\scripts\<helper>.py" inspect --target "<target>" --json
    ```
+````
 
 2. Stop or ask if `<risk field>` is present.
 3. Create `<plan>.json` outside the target repo/folder.
@@ -83,8 +81,10 @@ Use the bundled Python helper for deterministic checks and execution. Use the LL
    python "<skill-dir>\scripts\<helper>.py" apply --target "<target>" --plan "<plan>.json"
    ```
 5. Report concise results.
+
 ```
 
 ## When not to pythonize heavily
 
 Do not force a script when the skill is mostly judgement, teaching, creative writing, or one-off reasoning. In those cases, only add small validators or artifact extractors if they remove repeated mechanical work.
+```

@@ -132,8 +132,15 @@ def parse_frontmatter_value(frontmatter: str, key: str) -> str | None:
 
 
 def slug_to_module(value: str) -> str:
-    normalized = re.sub(r"[^A-Za-z0-9]+", "_", value.strip().lower()).strip("_")
-    return normalized or "skill_helper"
+    normalized = re.sub(r"[^A-Za-z0-9]+", "-", value.strip().lower()).strip("-")
+    return normalized or "skill"
+
+
+def helper_stem(value: str) -> str:
+    stem = slug_to_module(value)
+    if not stem.endswith("-helper"):
+        stem = f"{stem}-helper"
+    return stem
 
 
 def extract_steps(body: str) -> list[str]:
@@ -293,7 +300,7 @@ def analyze_target(target_arg: str) -> dict[str, Any]:
     resources = existing_resources(target)
     skill_name = metadata.name or target.name
     existing_python_helpers = [path for path in resources.get("scripts", []) if path.endswith(".py")]
-    helper_name = Path(existing_python_helpers[0]).stem if existing_python_helpers else f"{slug_to_module(skill_name)}_helper"
+    helper_name = Path(existing_python_helpers[0]).stem if existing_python_helpers else helper_stem(skill_name)
     classified_steps = classify_lines(steps)
     score = estimate_pythonization_score(classified_steps, commands, resources)
 
@@ -317,7 +324,7 @@ def analyze_target(target_arg: str) -> dict[str, Any]:
 
 
 def helper_template(skill_name: str, module_name: str) -> str:
-    title = skill_name or module_name.replace("_", "-")
+    title = skill_name or module_name
     return textwrap.dedent(
         f'''\
         #!/usr/bin/env python3
@@ -428,9 +435,9 @@ def helper_template(skill_name: str, module_name: str) -> str:
 def scaffold_target(target_arg: str, helper_name_arg: str | None, *, overwrite: bool) -> dict[str, Any]:
     target, _text, metadata = load_skill(Path(target_arg))
     skill_name = metadata.name or target.name
-    helper_stem = slug_to_module(helper_name_arg or f"{slug_to_module(skill_name)}_helper")
+    helper_stem_value = helper_stem(helper_name_arg or skill_name)
     scripts_dir = target / "scripts"
-    helper_path = scripts_dir / f"{helper_stem}.py"
+    helper_path = scripts_dir / f"{helper_stem_value}.py"
 
     scripts_dir.mkdir(parents=True, exist_ok=True)
     created: list[str] = []
@@ -439,7 +446,7 @@ def scaffold_target(target_arg: str, helper_name_arg: str | None, *, overwrite: 
     if helper_path.exists() and not overwrite:
         skipped.append(str(helper_path))
     else:
-        helper_path.write_text(helper_template(skill_name, helper_stem), encoding="utf-8")
+        helper_path.write_text(helper_template(skill_name, helper_stem_value), encoding="utf-8")
         created.append(str(helper_path))
 
     return {
@@ -471,7 +478,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     scaffold_parser = subparsers.add_parser("scaffold", help="Create a starter helper script in the target skill.")
     scaffold_parser.add_argument("--target", required=True, help="Target skill directory or SKILL.md path.")
-    scaffold_parser.add_argument("--helper-name", help="Optional helper filename stem. Defaults to <skill>_helper.")
+    scaffold_parser.add_argument("--helper-name", help="Optional helper filename stem. Defaults to <skill>-helper.")
     scaffold_parser.add_argument("--overwrite", action="store_true", help="Overwrite an existing helper file.")
 
     return parser

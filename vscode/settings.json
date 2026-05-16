@@ -115,7 +115,7 @@
     "editor.tabSize": 2
   },
   "azureTerraform.survey": {
-    "surveyPromptDate": "2026-05-02T13:55:20.162Z",
+    "surveyPromptDate": "never",
     "surveyPromptIgnoredCount": 0
   }
 }

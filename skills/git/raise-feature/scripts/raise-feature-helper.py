@@ -114,23 +114,50 @@ def gh_auth_status(gh: str) -> dict[str, Any]:
     }
 
 
-def build_body(problem: str, solution: str) -> str:
-    return "\n".join(
-        [
-            "**Is your feature request related to a problem? Please describe.**",
-            problem.strip(),
-            "",
-            "**Describe the solution you'd like**",
-            solution.strip(),
-        ]
+def parse_template(path: Path) -> dict[str, Any]:
+    text = path.read_text(encoding="utf-8")
+    metadata: dict[str, str] = {}
+    body = text
+    if text.startswith("---\n"):
+        _, frontmatter, body = text.split("---\n", 2)
+        for line in frontmatter.splitlines():
+            if ":" in line:
+                key, value = line.split(":", 1)
+                metadata[key.strip()] = value.strip().strip('"')
+    return {"path": str(path), "frontmatter": metadata, "body": body.strip()}
+
+
+def find_issue_template(start: Path, name: str) -> dict[str, Any] | None:
+    for parent in [start, *start.parents]:
+        for root in (parent, parent.parent):
+            candidate = root / ".github" / ".github" / "ISSUE_TEMPLATE" / name
+            if candidate.exists():
+                return parse_template(candidate)
+    return None
+
+
+def build_body(problem: str, solution: str, template: dict[str, Any] | None) -> str:
+    if not template:
+        raise SkillHelperError("Shared feature issue template not found: .github/.github/ISSUE_TEMPLATE/feature-request.md")
+    body = template["body"]
+    body = body.replace(
+        "A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]",
+        problem.strip(),
     )
+    body = body.replace("A clear and concise description of what you want to happen.", solution.strip())
+    return body.strip()
 
 
-def normalize_title(title: str) -> str:
+def normalize_title(title: str, template: dict[str, Any] | None = None) -> str:
     stripped = title.strip()
-    if stripped.lower().startswith(FEATURE_PREFIX.lower()):
-        return FEATURE_PREFIX + stripped[len(FEATURE_PREFIX) :].strip()
-    return FEATURE_PREFIX + stripped
+    prefix = FEATURE_PREFIX
+    if template:
+        match = re.match(r"(\[[^]]+\]\s*-\s*)", template.get("frontmatter", {}).get("title", ""))
+        if match:
+            prefix = match.group(1)
+    if stripped.lower().startswith(prefix.lower()):
+        return prefix + stripped[len(prefix) :].strip()
+    return prefix + stripped
 
 
 def inspect_target(target_arg: str) -> dict[str, Any]:
@@ -139,6 +166,8 @@ def inspect_target(target_arg: str) -> dict[str, Any]:
     inferred_repo = infer_repo_from_remote(remote or "") if remote else None
     gh = find_gh()
     auth = gh_auth_status(gh) if gh else {"ok": False, "summary": "gh executable not found"}
+    template = find_issue_template(target, "feature-request.md")
+    frontmatter = template.get("frontmatter", {}) if template else {}
 
     risk_flags: list[str] = []
     if not inferred_repo:
@@ -147,6 +176,8 @@ def inspect_target(target_arg: str) -> dict[str, Any]:
         risk_flags.append("gh_not_found")
     elif not auth["ok"]:
         risk_flags.append("gh_not_authenticated")
+    if not template:
+        risk_flags.append("issue_template_not_found")
 
     return {
         "target": str(target),
@@ -155,13 +186,18 @@ def inspect_target(target_arg: str) -> dict[str, Any]:
         "inferred_repository": inferred_repo,
         "gh_path": gh,
         "gh_auth": auth,
+        "issue_template": template,
         "project": {
             "id": PROJECT_ID,
             "type_field_id": TYPE_FIELD_ID,
             "feature_option_id": FEATURE_OPTION_ID,
         },
         "required_plan_fields": ["repository", "title", "problem", "solution", "approved"],
-        "defaults": {"label": DEFAULT_LABEL, "assignee": DEFAULT_ASSIGNEE, "title_prefix": FEATURE_PREFIX},
+        "defaults": {
+            "label": frontmatter.get("labels", DEFAULT_LABEL),
+            "assignee": frontmatter.get("assignees", DEFAULT_ASSIGNEE),
+            "title_prefix": frontmatter.get("title", FEATURE_PREFIX + "Placeholder"),
+        },
         "risk_flags": risk_flags,
         "suggested_actions": [
             "Use inferred_repository if correct, otherwise ask the user for owner/repo.",
@@ -191,20 +227,21 @@ def require_text(plan: dict[str, Any], field: str) -> str:
     return value.strip()
 
 
-def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
+def validate_plan(plan: dict[str, Any], template: dict[str, Any] | None) -> dict[str, Any]:
     repository = require_text(plan, "repository")
     if not REPO_PATTERN.match(repository):
         raise SkillHelperError("Plan field 'repository' must be in owner/repo format")
 
-    title = normalize_title(require_text(plan, "title"))
+    title = normalize_title(require_text(plan, "title"), template)
     problem = require_text(plan, "problem")
     solution = require_text(plan, "solution")
     approved = plan.get("approved")
     if approved is not True:
         raise SkillHelperError("Plan field 'approved' must be true after explicit user approval")
 
-    label = plan.get("label", DEFAULT_LABEL)
-    assignee = plan.get("assignee", DEFAULT_ASSIGNEE)
+    frontmatter = template.get("frontmatter", {}) if template else {}
+    label = plan.get("label", frontmatter.get("labels", DEFAULT_LABEL))
+    assignee = plan.get("assignee", frontmatter.get("assignees", DEFAULT_ASSIGNEE))
     if not isinstance(label, str) or not label.strip():
         raise SkillHelperError("Plan field 'label' must be a non-empty string when provided")
     if not isinstance(assignee, str) or not assignee.strip():
@@ -215,7 +252,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "title": title,
         "problem": problem,
         "solution": solution,
-        "body": build_body(problem, solution),
+        "body": build_body(problem, solution, template),
         "label": label.strip(),
         "assignee": assignee.strip(),
     }
@@ -307,7 +344,8 @@ def set_project_type_feature(gh: str, item_id: str) -> None:
 def apply_plan(target_arg: str, plan_path: str, *, dry_run: bool) -> dict[str, Any]:
     target = resolve_target(target_arg)
     plan = load_plan(plan_path)
-    normalized = validate_plan(plan)
+    template = find_issue_template(target, "feature-request.md")
+    normalized = validate_plan(plan, template)
     gh = find_gh()
     if not gh:
         raise SkillHelperError("gh executable not found")
