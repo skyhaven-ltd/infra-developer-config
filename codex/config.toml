@@ -2,8 +2,8 @@
 # Symlinked from ~/.codex/config.toml
 # Docs: https://developers.openai.com/codex/config-reference
 
-model = "gpt-5.4-mini"
-model_reasoning_effort = "low"
+model = "gpt-5.5"
+model_reasoning_effort = "medium"
 model_instructions_file = "~/.codex/instructions.md"
 
 # Permissions — mirrors Claude Code's broad allow list

@@ -3,69 +3,78 @@ name: raise-feature
 description: Raise a feature request issue on a GitHub repository using the standard feature template
 ---
 
-Raise a GitHub feature request issue on a repository. Follow this process exactly.
+Raise a GitHub feature request issue on a repository. Use the bundled Python helper for deterministic checks and execution. Use the LLM only for judgement: understanding the user's request, expanding terse details into meaningful template prose, deciding whether enough information is present, and confirming the exact issue with the user before creation.
 
-## Step 1 — Gather information
+## Step 1 — Inspect repository and tooling
+
+Run the helper from the current working directory or target repository directory:
+
+```powershell
+python "C:\Local Files\Repositories\Sky Haven\ops-developer-config\skills\git\raise-feature\scripts\raise_feature_helper.py" inspect --target "." --json
+```
+
+Inspect these JSON fields:
+
+- `inferred_repository`: use this if it is correct; otherwise ask for `owner/repo`.
+- `risk_flags`: stop and resolve `repository_not_inferred`, `gh_not_found`, or `gh_not_authenticated` before applying.
+- `defaults`: label, assignee, and title prefix used by the helper.
+- `project`: the Sky Haven Project V2 IDs used to set Type to Feature.
+
+## Step 2 — Gather and draft
 
 Ask the user for any missing details:
 
-- **Repository**: which GitHub repo (e.g. `liam-goodchild/my-repo`)? If the working directory is a git repo, infer from `git remote get-url origin`.
-- **Title**: a short description of the feature (will be prefixed with `[FEATURE] - `)
-- **Problem**: what problem does this feature solve? (e.g. "I'm always frustrated when...")
+- **Repository**: which GitHub repo, in `owner/repo` format, unless `inferred_repository` is correct.
+- **Title**: a short description of the feature. The helper prefixes it with `[FEATURE] - ` if needed.
+- **Problem**: what problem does this feature solve?
 - **Solution**: what should happen?
 
-Do not proceed until you have enough to fill both body sections meaningfully. If the user provides a terse description, expand it into the template structure — do not ask for every field individually if context makes them inferable.
+Do not proceed until you have enough to fill both body sections meaningfully. If the user provides a terse description, expand it into the template structure; do not ask for every field individually if context makes them inferable.
 
-## Step 2 — Confirm before creating
+The issue body must follow the feature request template:
 
-Show the user the full issue title and body for review before creating. Wait for explicit approval.
-
-## Step 3 — Create the issue
-
-Use the `gh` CLI. On Windows the binary is at `/c/Program Files/GitHub CLI/gh.exe`.
-
-Body follows the feature request template from `liam-goodchild/.github` at `.github/ISSUE_TEMPLATE/feature_request.md`.
-
-```bash
-"/c/Program Files/GitHub CLI/gh.exe" issue create \
-  --repo "<owner>/<repo>" \
-  --title "[FEATURE] - <title>" \
-  --label "use-type-field-instead" \
-  --assignee "liam-goodchild" \
-  --body "$(cat <<'EOF'
+```markdown
 **Is your feature request related to a problem? Please describe.**
 <problem>
 
 **Describe the solution you'd like**
 <solution>
-EOF
-)"
 ```
 
-## Step 4 — Set Type field on project board
+## Step 3 — Confirm before creating
 
-After the issue is created, set the **Type** field to **Feature** on the Sky Haven Project Board. Find the item by issue node ID and update the single-select field `PVTSSF_lAHOB9ID-s4BU_KBzhRbk2o` to option ID `c156bb04` (Feature).
+Show the user the full issue title and body for review. Wait for explicit approval before creating a plan with `approved: true`.
 
-```bash
-ISSUE_ID=$("/c/Program Files/GitHub CLI/gh.exe" api repos/<owner>/<repo>/issues/<number> --jq '.node_id')
+Create a plan JSON file outside the target repository, for example in `$env:TEMP`:
 
-"/c/Program Files/GitHub CLI/gh.exe" api graphql -f query='
-  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-    updateProjectV2ItemFieldValue(input: {
-      projectId: $projectId
-      itemId: $itemId
-      fieldId: $fieldId
-      value: { singleSelectOptionId: $optionId }
-    }) { projectV2Item { id } }
-  }
-' -f projectId="PVT_kwHOB9ID-s4BU_KB" \
-  -f itemId="$ISSUE_ID" \
-  -f fieldId="PVTSSF_lAHOB9ID-s4BU_KBzhRbk2o" \
-  -f optionId="c156bb04"
+```json
+{
+  "repository": "owner/repo",
+  "title": "Short feature title",
+  "problem": "Meaningful problem statement.",
+  "solution": "Meaningful desired solution.",
+  "approved": true
+}
 ```
 
-Note: the issue must already be linked to the project board (added as an item) for this to work. If not, add it first via `addProjectV2ItemById`.
+Optional plan fields are `label` and `assignee`; defaults are `use-type-field-instead` and `liam-goodchild`.
+
+## Step 4 — Validate or create the issue
+
+Dry-run first when practical:
+
+```powershell
+python "C:\Local Files\Repositories\Sky Haven\ops-developer-config\skills\git\raise-feature\scripts\raise_feature_helper.py" apply --target "." --plan "$env:TEMP\feature-plan.json" --dry-run
+```
+
+After approval and validation, create the issue:
+
+```powershell
+python "C:\Local Files\Repositories\Sky Haven\ops-developer-config\skills\git\raise-feature\scripts\raise_feature_helper.py" apply --target "." --plan "$env:TEMP\feature-plan.json"
+```
+
+The helper uses `gh issue create`, adds the created issue to the Sky Haven Project Board, and sets the **Type** field to **Feature** using option ID `c156bb04`.
 
 ## Step 5 — Report back
 
-Print the URL of the created issue.
+Report the created issue URL from `created_issue_url`. If the helper fails, report the concise JSON error and the safest next action.
