@@ -194,7 +194,11 @@ def inspect_target(target_arg: str) -> dict[str, Any]:
         },
         "required_plan_fields": ["repository", "title", "problem", "solution", "approved"],
         "defaults": {
-            "label": frontmatter.get("labels", DEFAULT_LABEL),
+            # Labels are intentionally repository-local compatibility metadata.
+            # Do not inherit the shared issue template label (for example,
+            # "feature") because not every repository carries semantic labels;
+            # classification is handled by the GitHub Project Type field.
+            "label": DEFAULT_LABEL,
             "assignee": frontmatter.get("assignees", DEFAULT_ASSIGNEE),
             "title_prefix": frontmatter.get("title", FEATURE_PREFIX + "Placeholder"),
         },
@@ -240,7 +244,10 @@ def validate_plan(plan: dict[str, Any], template: dict[str, Any] | None) -> dict
         raise SkillHelperError("Plan field 'approved' must be true after explicit user approval")
 
     frontmatter = template.get("frontmatter", {}) if template else {}
-    label = plan.get("label", frontmatter.get("labels", DEFAULT_LABEL))
+    # Prefer the single cross-repository compatibility label by default.
+    # Allow an explicit plan label override for exceptional repositories, but do
+    # not inherit labels from the shared issue template.
+    label = plan.get("label", DEFAULT_LABEL)
     assignee = plan.get("assignee", frontmatter.get("assignees", DEFAULT_ASSIGNEE))
     if not isinstance(label, str) or not label.strip():
         raise SkillHelperError("Plan field 'label' must be a non-empty string when provided")

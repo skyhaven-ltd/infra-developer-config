@@ -18,7 +18,7 @@ Inspect these JSON fields:
 - `inferred_repository`: use this if it is correct; otherwise ask for `owner/repo`.
 - `risk_flags`: stop and resolve `repository_not_inferred`, `gh_not_found`, or `gh_not_authenticated` before applying.
 - `issue_template`: the shared template loaded from `.github/.github/ISSUE_TEMPLATE/feature-request.md`. Do not invent or use embedded issue templates.
-- `defaults`: label, assignee, and title prefix used by the helper.
+- `defaults`: label, assignee, and title prefix used by the helper. The helper intentionally defaults `label` to `use-type-field-instead` rather than inheriting semantic labels from the shared issue template.
 - `project`: the Sky Haven Project V2 IDs used to set Type to Feature.
 
 ## Step 2 — Gather and draft
@@ -58,7 +58,7 @@ Create a plan JSON file outside the target repository, for example in `$env:TEMP
 }
 ```
 
-Optional plan fields are `label` and `assignee`; defaults are `use-type-field-instead` and `liam-goodchild`.
+Optional plan fields are `label` and `assignee`; defaults are `use-type-field-instead` and `liam-goodchild`. Only override `label` for exceptional repositories; normal classification belongs in the GitHub Project Type field.
 
 ## Step 4 — Validate or create the issue
 
