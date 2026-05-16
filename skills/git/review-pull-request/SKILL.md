@@ -20,12 +20,15 @@ Use the bundled Python helper for deterministic PR argument parsing and reposito
    ## PR Review: #<number> - <title>
 
    ### Must Fix
+
    - **file:line** Issue -> suggested fix
 
    ### Should Fix
+
    - **file:line** Issue -> suggested fix
 
    ### Looks Good
+
    - Brief note.
    ```
 
