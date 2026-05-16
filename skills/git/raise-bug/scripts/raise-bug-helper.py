@@ -63,15 +63,39 @@ def require_approved(plan: dict[str, Any]):
     if plan.get('approved') is not True: raise SkillError('Plan must include approved=true after explicit user approval')
 
 BUG_PREFIX='[BUG] - '; DEFAULT_LABEL='use-type-field-instead'; DEFAULT_ASSIGNEE='liam-goodchild'; PROJECT_ID='PVT_kwHOB9ID-s4BU_KB'; TYPE_FIELD_ID='PVTSSF_lAHOB9ID-s4BU_KBzhRbk2o'; BUG_OPTION_ID='951d9251'
-def normalize_title(t):
-    t=t.strip(); return t if t.lower().startswith(BUG_PREFIX.lower()) else BUG_PREFIX+t
-def build_body(desc, steps, expected):
-    return '\n'.join(['**Describe the bug**',desc.strip(),'','**To Reproduce**','Steps to reproduce the behavior:','',steps.strip(),'','**Expected behavior**',expected.strip()])
+def parse_template(path: Path) -> dict[str,Any]:
+    text=path.read_text(encoding='utf-8'); meta: dict[str,str]={}; body=text
+    if text.startswith('---\n'):
+        _, fm, body=text.split('---\n',2)
+        for line in fm.splitlines():
+            if ':' in line:
+                k,v=line.split(':',1); meta[k.strip()]=v.strip().strip('"')
+    return {'path':str(path),'frontmatter':meta,'body':body.strip()}
+def find_issue_template(start: Path, name: str) -> dict[str,Any]|None:
+    for parent in [start,*start.parents]:
+        for root in (parent, parent.parent):
+            candidate=root.joinpath('.github','.github','ISSUE_TEMPLATE',name)
+            if candidate.exists(): return parse_template(candidate)
+    return None
+def normalize_title(t, template=None):
+    t=t.strip(); prefix=BUG_PREFIX
+    if template:
+        raw=template.get('frontmatter',{}).get('title','')
+        m=re.match(r'(\[[^]]+\]\s*-\s*)', raw)
+        if m: prefix=m.group(1)
+    return t if t.lower().startswith(prefix.lower()) else prefix+t
+def build_body(desc, steps, expected, template):
+    if not template: raise SkillError('Shared bug issue template not found: .github/.github/ISSUE_TEMPLATE/bug-report.md')
+    body=template['body']
+    body=body.replace('A clear and concise description of what the bug is.', desc.strip())
+    body=re.sub(r"1\. Go to '.*?'\n2\. Click on '.*?'\n3\. Scroll down to '.*?'\n4\. See error", steps.strip(), body)
+    body=body.replace('A clear and concise description of what you expected to happen.', expected.strip())
+    return body.strip()
 def inspect(t):
     p=target_dir(t); gh=exe('gh'); remote=remote_origin(p); repo=parse_github(remote); auth={'ok':False,'summary':'gh not found'}
     if gh:
         cp=run([gh,'auth','status','-h','github.com']); auth={'ok':cp.returncode==0,'summary':'authenticated' if cp.returncode==0 else 'not authenticated'}
-    return {'target':str(p),'git_remote_origin':remote,'inferred_repository':repo,'gh_path':gh,'gh_auth':auth,'project':{'id':PROJECT_ID,'type_field_id':TYPE_FIELD_ID,'bug_option_id':BUG_OPTION_ID},'required_plan_fields':['repository','title','description','steps','expected','approved'],'defaults':{'label':DEFAULT_LABEL,'assignee':DEFAULT_ASSIGNEE,'title_prefix':BUG_PREFIX},'risk_flags':[k for k,b in {'repository_not_inferred':not repo,'gh_not_found':not gh,'gh_not_authenticated':gh and not auth['ok']}.items() if b]}
+    template=find_issue_template(p,'bug-report.md'); fm=template.get('frontmatter',{}) if template else {}; return {'target':str(p),'git_remote_origin':remote,'inferred_repository':repo,'gh_path':gh,'gh_auth':auth,'issue_template':template,'project':{'id':PROJECT_ID,'type_field_id':TYPE_FIELD_ID,'bug_option_id':BUG_OPTION_ID},'required_plan_fields':['repository','title','description','steps','expected','approved'],'defaults':{'label':fm.get('labels',DEFAULT_LABEL),'assignee':fm.get('assignees',DEFAULT_ASSIGNEE),'title_prefix':fm.get('title',BUG_PREFIX+'Placeholder')},'risk_flags':[k for k,b in {'repository_not_inferred':not repo,'gh_not_found':not gh,'gh_not_authenticated':gh and not auth['ok'],'issue_template_not_found':not template}.items() if b]}
 def req(plan,k):
     v=plan.get(k)
     if not isinstance(v,str) or not v.strip(): raise SkillError(f'{k} must be a non-empty string')
@@ -81,10 +105,10 @@ def gh_graphql(gh,query,fields):
     for k,v in fields.items(): args += ['-f',f'{k}={v}']
     cp=run(args,check=True); return json.loads(cp.stdout)
 def apply(t, plan_path, dry):
-    target_dir(t); plan=load_plan(plan_path); require_approved(plan); gh=exe('gh')
+    p=target_dir(t); plan=load_plan(plan_path); require_approved(plan); gh=exe('gh')
     if not gh: raise SkillError('gh executable not found')
-    repo=req(plan,'repository'); title=normalize_title(req(plan,'title')); body=build_body(req(plan,'description'),req(plan,'steps'),req(plan,'expected'))
-    summary={'repository':repo,'title':title,'body_preview':body,'label':plan.get('label',DEFAULT_LABEL),'assignee':plan.get('assignee',DEFAULT_ASSIGNEE),'project':{'id':PROJECT_ID,'type':'Bug'}}
+    repo=req(plan,'repository'); template=find_issue_template(p,'bug-report.md'); fm=template.get('frontmatter',{}) if template else {}; title=normalize_title(req(plan,'title'),template); body=build_body(req(plan,'description'),req(plan,'steps'),req(plan,'expected'),template)
+    summary={'repository':repo,'title':title,'body_preview':body,'label':plan.get('label',fm.get('labels',DEFAULT_LABEL)),'assignee':plan.get('assignee',fm.get('assignees',DEFAULT_ASSIGNEE)),'project':{'id':PROJECT_ID,'type':'Bug'}}
     if dry: return {**summary,'dry_run':True,'would_create_issue':True,'would_set_project_type':True}
     cp=run([gh,'issue','create','--repo',repo,'--title',title,'--label',summary['label'],'--assignee',summary['assignee'],'--body',body],check=True)
     url=cp.stdout.strip().splitlines()[-1]; m=re.search(r'/issues/(\d+)',url)
