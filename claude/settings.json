@@ -35,5 +35,6 @@
     }
   },
   "effortLevel": "medium",
-  "awaySummaryEnabled": false
+  "awaySummaryEnabled": false,
+  "model": "haiku"
 }
