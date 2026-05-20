@@ -353,7 +353,8 @@ def validate_message(message: str) -> str:
 
 def load_plan(plan_path: str) -> dict[str, Any]:
     try:
-        with open(plan_path, "r", encoding="utf-8") as handle:
+        # Accept plans written by PowerShell cmdlets that may emit a UTF-8 BOM.
+        with open(plan_path, "r", encoding="utf-8-sig") as handle:
             plan = json.load(handle)
     except OSError as exc:
         raise GitCommitPushError(f"Could not read plan file: {exc}") from exc
