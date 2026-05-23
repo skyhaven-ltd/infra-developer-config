@@ -269,6 +269,225 @@ function Remove-LegacyAgentsSkillsJunction {
     Write-Host "  [skip] $Link exists and is not the legacy repo junction" -ForegroundColor DarkGray
 }
 
+function Remove-ManagedFileLink {
+    param([string]$Link, [string]$ExpectedTarget)
+
+    $item = Get-Item -LiteralPath $Link -ErrorAction SilentlyContinue
+    if (-not $item) { return $false }
+    if (-not ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { return $false }
+    if (-not (Test-ReparseTarget $Link $ExpectedTarget)) { return $false }
+
+    Remove-Item -LiteralPath $Link -Force
+    Write-Host "  [remove] $Link legacy config symlink" -ForegroundColor Yellow
+    return $true
+}
+
+function ConvertTo-OrderedJsonObject {
+    param([object]$InputObject)
+
+    $result = [ordered]@{}
+    if (-not $InputObject) { return $result }
+
+    $InputObject.PSObject.Properties | ForEach-Object {
+        $result[$_.Name] = $_.Value
+    }
+
+    return $result
+}
+
+function Merge-ClaudeSettings {
+    param([string]$Source, [string]$Destination)
+
+    if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) {
+        Write-Host "  [skip] shared Claude settings not found: $Source" -ForegroundColor Yellow
+        return
+    }
+
+    Remove-ManagedFileLink $Destination $Source | Out-Null
+    New-Item -ItemType Directory -Path (Split-Path $Destination) -Force | Out-Null
+
+    $sourceSettings = Get-Content -LiteralPath $Source -Raw | ConvertFrom-Json
+    if (Test-Path -LiteralPath $Destination -PathType Leaf) {
+        $destinationSettings = Get-Content -LiteralPath $Destination -Raw | ConvertFrom-Json
+    } else {
+        $destinationSettings = [pscustomobject]@{}
+    }
+
+    $merged = ConvertTo-OrderedJsonObject $destinationSettings
+    foreach ($propertyName in @("permissions", "enabledPlugins", "extraKnownMarketplaces")) {
+        if ($sourceSettings.PSObject.Properties.Name -contains $propertyName) {
+            $merged[$propertyName] = $sourceSettings.$propertyName
+        }
+    }
+
+    $merged | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $Destination -Encoding UTF8
+    Write-Host "  [merge]  $Destination <= shared permissions/plugins" -ForegroundColor Green
+}
+
+function Get-TomlSectionName {
+    param([string]$Line)
+
+    if ($Line -match '^\s*\[([^\]]+)\]\s*$') {
+        return $Matches[1]
+    }
+
+    return $null
+}
+
+function Get-TomlKeyName {
+    param([string]$Line)
+
+    if ($Line -match '^\s*([A-Za-z0-9_.-]+)\s*=') {
+        return $Matches[1]
+    }
+
+    return $null
+}
+
+function Read-SharedCodexConfig {
+    param([string]$Source)
+
+    $shared = @{}
+    if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) {
+        return $shared
+    }
+
+    $section = ""
+    foreach ($line in Get-Content -LiteralPath $Source) {
+        $sectionName = Get-TomlSectionName $line
+        if ($null -ne $sectionName) {
+            $section = $sectionName
+            continue
+        }
+
+        $keyName = Get-TomlKeyName $line
+        if ($null -eq $keyName) { continue }
+
+        $qualifiedKey = if ($section) { "$section.$keyName" } else { $keyName }
+        if (@("approval_policy", "sandbox_mode", "model_instructions_file", "windows.sandbox") -contains $qualifiedKey) {
+            $shared[$qualifiedKey] = $line
+        }
+    }
+
+    return $shared
+}
+
+function Set-TomlScalarLine {
+    param(
+        [string[]]$Lines,
+        [string]$QualifiedKey,
+        [string]$ReplacementLine
+    )
+
+    $parts = $QualifiedKey -split '\.', 2
+    $targetSection = if ($parts.Count -eq 2) { $parts[0] } else { "" }
+    $targetKey = if ($parts.Count -eq 2) { $parts[1] } else { $parts[0] }
+    $section = ""
+    $updated = $false
+    $output = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($line in $Lines) {
+        $sectionName = Get-TomlSectionName $line
+        if ($null -ne $sectionName) {
+            $section = $sectionName
+        }
+
+        $keyName = Get-TomlKeyName $line
+        if (($section -eq $targetSection) -and ($keyName -eq $targetKey)) {
+            $output.Add($ReplacementLine)
+            $updated = $true
+        } else {
+            $output.Add($line)
+        }
+    }
+
+    if (-not $updated) {
+        if ($targetSection -eq "") {
+            $insertIndex = 0
+            while (($insertIndex -lt $output.Count) -and (($output[$insertIndex] -match '^\s*#') -or ($output[$insertIndex] -match '^\s*$'))) {
+                $insertIndex++
+            }
+            $output.Insert($insertIndex, $ReplacementLine)
+        } else {
+            $sectionIndex = -1
+            for ($index = 0; $index -lt $output.Count; $index++) {
+                if ((Get-TomlSectionName $output[$index]) -eq $targetSection) {
+                    $sectionIndex = $index
+                    break
+                }
+            }
+
+            if ($sectionIndex -ge 0) {
+                $insertIndex = $sectionIndex + 1
+                while (($insertIndex -lt $output.Count) -and ($null -eq (Get-TomlSectionName $output[$insertIndex]))) {
+                    $insertIndex++
+                }
+                $output.Insert($insertIndex, $ReplacementLine)
+            } else {
+                if (($output.Count -gt 0) -and ($output[$output.Count - 1] -ne "")) {
+                    $output.Add("")
+                }
+                $output.Add("[$targetSection]")
+                $output.Add($ReplacementLine)
+            }
+        }
+    }
+
+    return $output.ToArray()
+}
+
+function Merge-CodexConfig {
+    param([string]$Source, [string]$Destination)
+
+    $shared = Read-SharedCodexConfig $Source
+    if ($shared.Count -eq 0) {
+        Write-Host "  [skip] shared Codex config values not found: $Source" -ForegroundColor Yellow
+        return
+    }
+
+    Remove-ManagedFileLink $Destination $Source | Out-Null
+    New-Item -ItemType Directory -Path (Split-Path $Destination) -Force | Out-Null
+
+    if (Test-Path -LiteralPath $Destination -PathType Leaf) {
+        $lines = @(Get-Content -LiteralPath $Destination)
+    } else {
+        $lines = @(
+            "# Codex CLI local configuration",
+            "# Managed shared values are merged by Install-DeveloperConfig.ps1; local projects are preserved."
+        )
+    }
+
+    foreach ($qualifiedKey in @("approval_policy", "sandbox_mode", "model_instructions_file", "windows.sandbox")) {
+        if ($shared.ContainsKey($qualifiedKey)) {
+            $lines = @(Set-TomlScalarLine -Lines $lines -QualifiedKey $qualifiedKey -ReplacementLine $shared[$qualifiedKey])
+        }
+    }
+
+    Set-Content -LiteralPath $Destination -Value $lines -Encoding UTF8
+    Write-Host "  [merge]  $Destination <= shared permissions/sandbox settings" -ForegroundColor Green
+}
+
+function Disable-VSCodeRepoManagedFiles {
+    param([string]$UserDirectory, [string]$RepoDirectory)
+
+    New-Item -ItemType Directory -Path $UserDirectory -Force | Out-Null
+
+    foreach ($fileName in @("settings.json", "keybindings.json")) {
+        $link = Join-Path $UserDirectory $fileName
+        $target = Join-Path $RepoDirectory $fileName
+        if (Remove-ManagedFileLink $link $target) {
+            if (Test-Path -LiteralPath $target -PathType Leaf) {
+                Copy-Item -LiteralPath $target -Destination $link -Force
+                Write-Host "  [copy]    $link <- $target (one-time handoff to VS Code Sync)" -ForegroundColor Cyan
+            }
+        } elseif (Test-Path -LiteralPath $link -PathType Leaf) {
+            Write-Host "  [skip] $link is local; use VS Code Settings Sync" -ForegroundColor DarkGray
+        } else {
+            Write-Host "  [skip] $link not found; use VS Code Settings Sync" -ForegroundColor DarkGray
+        }
+    }
+}
+
 function ConvertTo-TaskArgument {
     param(
         [Parameter(Mandatory = $true)]
@@ -409,32 +628,40 @@ Remove-LegacyAgentsSkillsJunction "$env:USERPROFILE\.agents\skills" "$Repo\skill
 Write-Host "`nClaude" -ForegroundColor Cyan
 New-Junction "$claude\docs" "$Repo\docs"
 New-Symlink "$claude\CLAUDE.md" "$Repo\CLAUDE.md"
-New-Symlink "$claude\settings.json" "$Repo\claude\settings.json"
+Merge-ClaudeSettings "$Repo\claude\settings.json" "$claude\settings.json"
 
 # -- Codex -----------------------------------------------------------------
 
 Write-Host "`nCodex" -ForegroundColor Cyan
 New-Symlink "$codex\instructions.md" "$Repo\codex\instructions.md"
-New-Symlink "$codex\config.toml" "$Repo\codex\config.toml"
+Merge-CodexConfig "$Repo\codex\config.toml" "$codex\config.toml"
 
 # -- VS Code ---------------------------------------------------------------
 
 Write-Host "`nVS Code" -ForegroundColor Cyan
 $vscodeUser = "$env:APPDATA\Code\User"
-New-Symlink "$vscodeUser\settings.json" "$Repo\vscode\settings.json"
-New-Symlink "$vscodeUser\keybindings.json" "$Repo\vscode\keybindings.json"
+Disable-VSCodeRepoManagedFiles $vscodeUser "$Repo\vscode"
 
 # -- Git -------------------------------------------------------------------
 
 Write-Host "`nGit" -ForegroundColor Cyan
 $gitignorePath = "$env:USERPROFILE\.gitignore_global"
-New-Symlink $gitignorePath "$Repo\git\gitignore_global"
+$repoGitignorePath = "$Repo\git\gitignore_global"
+if (Test-Path -LiteralPath $repoGitignorePath -PathType Leaf) {
+    New-Symlink $gitignorePath $repoGitignorePath
+} else {
+    Remove-ManagedFileLink $gitignorePath $repoGitignorePath | Out-Null
+    Write-Host "  [skip] repo global gitignore not found: $repoGitignorePath" -ForegroundColor DarkGray
+}
 
 # Wire the global gitignore if not already set
 $currentExcludesFile = git config --global core.excludesfile 2>$null
-if (-not $currentExcludesFile) {
+if ((-not $currentExcludesFile) -and (Test-Path -LiteralPath $repoGitignorePath -PathType Leaf)) {
     git config --global core.excludesfile $gitignorePath
     Write-Host "  [config] core.excludesfile = $gitignorePath" -ForegroundColor Green
+} elseif ($currentExcludesFile -and ($currentExcludesFile -ieq $gitignorePath) -and (-not (Test-Path -LiteralPath $repoGitignorePath -PathType Leaf))) {
+    git config --global --unset core.excludesfile
+    Write-Host "  [unset] core.excludesfile pointed at removed repo gitignore" -ForegroundColor Yellow
 } else {
     Write-Host "  [skip] core.excludesfile already set to $currentExcludesFile" -ForegroundColor DarkGray
 }
@@ -442,9 +669,12 @@ if (-not $currentExcludesFile) {
 # Wire global git hooks
 $hooksPath = "$Repo\git\hooks"
 $currentHooksPath = git config --global core.hooksPath 2>$null
-if (-not $currentHooksPath) {
+if ((-not $currentHooksPath) -and (Test-Path -LiteralPath $hooksPath -PathType Container)) {
     git config --global core.hooksPath $hooksPath
     Write-Host "  [config] core.hooksPath = $hooksPath" -ForegroundColor Green
+} elseif ($currentHooksPath -and ($currentHooksPath -ieq $hooksPath) -and (-not (Test-Path -LiteralPath $hooksPath -PathType Container))) {
+    git config --global --unset core.hooksPath
+    Write-Host "  [unset] core.hooksPath pointed at removed repo hooks" -ForegroundColor Yellow
 } else {
     Write-Host "  [skip] core.hooksPath already set to $currentHooksPath" -ForegroundColor DarkGray
 }
