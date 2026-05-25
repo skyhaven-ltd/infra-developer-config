@@ -1,6 +1,6 @@
 # Learning-app frontmatter template
 
-Canonical Markdown frontmatter for notes the self-hosted learning review app (`app-learning-review`) ingests. Shared by `learn-content` and `organise-vault` skills. Do not diverge.
+Canonical Markdown frontmatter for notes the self-hosted learning review app (`app-learning-review`) ingests. Shared by `learn-content` and `organise-vault` skills. Do not diverge or hand-roll a separate YAML schema in either skill.
 
 ```yaml
 ---
@@ -29,7 +29,9 @@ learning_generation_notes: "<short hint for Codex on what to emphasise>"
 
 - `source_type` is the only field whose value reflects origin. `learn-content` writes `learning-synthesis`; `organise-vault` writes `ad-hoc-note`. All other fields are identical across skills.
 - `learning_status: needs-questions` is the only value the app's scan picks up. Do not set `active`, `stale`, or `skip` — those belong to the app.
-- `learning_question_types` lists every type by default. Remove any type that does not fit the source material; do not invent new types.
+- `learning_question_types` must be present on every learning-app note. Emit it as the YAML block list shown above for newly-created notes.
+- The app accepts `learning_question_types` as a YAML list, a comma-separated string, or a whitespace-separated string. Valid values are only `multiple-choice`, `short-answer`, `rubric`, and `categorisation`.
+- Drop invalid `learning_question_types` entries. If the field is absent, empty, or all entries are invalid, write all four valid values in the canonical order above.
 - `learning_question_goal` is the target count. Range 1-20. Default 6.
 - `learning_generation_notes` is optional but useful for steering Codex.
 - Add topic-specific tags after `inbox` as needed. The app filters notes by these tags.

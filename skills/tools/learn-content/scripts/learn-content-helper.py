@@ -60,16 +60,15 @@ def inspect_file(path_text: str) -> dict[str, Any]:
             "mental models",
             "trade-offs",
             "misconceptions",
-            "practice questions",
-            "retrieval schedule",
+            "application prompts",
+            "sources",
+            "learning-app frontmatter",
         ],
-        "suggested_question_mix": [
-            "free recall",
-            "concept check",
-            "application",
-            "comparison",
-            "sequencing",
-            "error diagnosis",
+        "valid_learning_question_types": [
+            "multiple-choice",
+            "short-answer",
+            "rubric",
+            "categorisation",
         ],
     }
 
@@ -118,7 +117,8 @@ def inspect_urls(urls: list[str]) -> dict[str, Any]:
             "extract learning structure",
             "synthesize themes and mental models",
             "build scenario reasoning",
-            "generate practice questions",
+            "set learning_status to needs-questions",
+            "set learning_question_types to the canonical valid values",
         ],
     }
 

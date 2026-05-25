@@ -1,11 +1,11 @@
 ---
 name: learn-content
-description: "Turn URLs, Markdown files, pasted notes, documentation, tutorials, articles, or study material into durable learning notes saved as Markdown in an Obsidian vault, with optional retrieval-practice questions inside the note. Use when the user asks to learn, study, revise, remember, synthesize sources, create study notes, parse a list of URLs, or generate Obsidian learning notes. This skill must write a vault note and should not print the full learning synthesis only to the terminal."
+description: "Turn URLs, Markdown files, pasted notes, documentation, tutorials, articles, or study material into durable learning notes saved as Markdown in an Obsidian vault, with app-owned retrieval-practice generation requested through frontmatter. Use when the user asks to learn, study, revise, remember, synthesize sources, create study notes, parse a list of URLs, or generate Obsidian learning notes. This skill must write a vault note and should not print the full learning synthesis only to the terminal."
 ---
 
 Use this skill to convert source material into durable understanding and save the result as a Markdown note in an Obsidian vault. Writing the note is mandatory: do not provide the full learning synthesis only in the chat/terminal.
 
-Use bundled helpers for deterministic inspection: URL validation, Markdown outline extraction, vault detection, and safe output-path suggestions. Use the LLM for judgement: synthesis, mental models, teaching order, misconceptions, scenario reasoning, practice questions, feedback, and retrieval scheduling.
+Use bundled helpers for deterministic inspection: URL validation, Markdown outline extraction, vault detection, and safe output-path suggestions. Use the LLM for judgement: synthesis, mental models, teaching order, misconceptions, scenario reasoning, application prompts, feedback cues, and retrieval scheduling notes.
 
 ## Non-negotiable output rule
 
@@ -20,7 +20,7 @@ Always write the generated learning material to a Markdown file in the user's Ob
 
 - **Study/synthesis from URLs or pasted content**: read the sources, synthesize a learning note, and save it to the vault.
 - **Study/synthesis from Markdown**: inspect the file first, preserve useful frontmatter/source metadata, then synthesize and save it to the vault.
-- **Retrieval practice**: by default, include practice questions and a retrieval schedule inside the saved note. Only run an interactive one-question-at-a-time quiz when the user explicitly asks for an interactive quiz.
+- **Retrieval practice**: by default, mark the saved note for app-owned question generation via the frontmatter standard in `99 - Meta/AI Formatting/LLM Vault Workflow.md`. Do not embed practice questions in the saved note. Only run an interactive one-question-at-a-time quiz when the user explicitly asks for an interactive quiz.
 
 ## Inspect sources
 
@@ -72,7 +72,7 @@ Prefer synthesis over summary. Write the note with this structure unless the use
 
 Paraphrase and synthesize. Do not reproduce long source passages. The learning review app generates and owns retrieval-practice questions for these notes; do not embed a `## Practice questions` section in the markdown body.
 
-Use the canonical learning-app frontmatter template defined in `../_shared/learning-app-frontmatter.md`. Set `source_type: learning-synthesis`. Do not duplicate or diverge from the shared template — read it and apply it.
+Use `99 - Meta/AI Formatting/LLM Vault Workflow.md` as the sole source of truth for frontmatter. Set `source_type: learning-synthesis` for notes created by this skill. The learning fields defined in the vault workflow are mandatory on every maintained note and must not be omitted.
 
 Preserve provenance. Include a `## Sources` section with source links or file paths.
 
