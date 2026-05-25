@@ -68,28 +68,11 @@ Prefer synthesis over summary. Write the note with this structure unless the use
 6. Scenario recognition cues
 7. Misconceptions and traps
 8. Worked examples or application prompts
-9. Practice questions
-10. Retrieval schedule
-11. Sources
+9. Sources
 
-Paraphrase and synthesize. Do not reproduce long source passages. Do not claim generated practice questions are official exam questions unless the source explicitly says they are.
+Paraphrase and synthesize. Do not reproduce long source passages. The learning review app generates and owns retrieval-practice questions for these notes; do not embed a `## Practice questions` section in the markdown body.
 
-Use this default frontmatter shape, adjusting only when the vault workflow requires a different convention:
-
-```yaml
----
-title: "<title>"
-created: YYYY-MM-DD
-source_type: learning-synthesis
-sources:
-  - "<url-or-source>"
-status: inbox
-confidence: medium
-tags:
-  - inbox
-  - learning
----
-```
+Use the canonical learning-app frontmatter template defined in `../_shared/learning-app-frontmatter.md`. Set `source_type: learning-synthesis`. Do not duplicate or diverge from the shared template — read it and apply it.
 
 Preserve provenance. Include a `## Sources` section with source links or file paths.
 
@@ -105,5 +88,5 @@ Only use this mode when the user explicitly asks for an interactive quiz, drill,
 6. Close with strengths, weak spots, 3-7 follow-up prompts, and a review cadence.
 7. Save a short quiz recap note to the vault unless the quiz was based on an existing note and the user asks not to create a recap.
 
-If the `obsidian-vault` skill is also invoked, defer vault-specific formatting, tag vocabulary, MOC updates, triage, and consolidation rules to that skill. For this skill alone, only create the learning note safely.
+If the `organise-vault` skill is also invoked, defer vault-specific formatting, tag vocabulary, MOC updates, triage, and consolidation rules to that skill. For this skill alone, only create the learning note safely.
 
