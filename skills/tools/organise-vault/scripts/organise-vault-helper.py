@@ -12,7 +12,19 @@ class SkillError(RuntimeError):
     pass
 
 
-REQUIRED_FRONTMATTER = ["created", "modified", "tags", "aliases", "source", "status"]
+REQUIRED_FRONTMATTER = [
+    "title",
+    "created",
+    "modified",
+    "sources",
+    "tags",
+    "aliases",
+    "learning_status",
+    "learning_question_goal",
+    "learning_question_types",
+]
+PINNED_INBOX_REQUIRED_FRONTMATTER = ["title", "created", "modified", "sources", "tags", "aliases"]
+LEARNING_FRONTMATTER = ["learning_status", "learning_question_goal", "learning_question_types"]
 TYPE_TAGS = {"concept", "runbook", "reference", "synopsis", "project", "journal", "moc", "inbox"}
 STATUSES = {"unprocessed", "processed", "evergreen", "draft", "stale", "archived"}
 PRESERVE_WHEN_FORMATTING = [
@@ -104,10 +116,16 @@ def parse_scalar(raw: str, key: str) -> str | None:
 
 
 def tags_from_file(path: Path) -> list[str]:
-    raw = frontmatter(read_text(path))
-    if raw is None:
-        return []
-    return parse_yaml_list(raw, "tags")
+    text = read_text(path)
+    raw = frontmatter(text)
+    tags: list[str] = []
+    if raw is not None:
+        tags.extend(parse_yaml_list(raw, "tags"))
+
+    for tag in re.findall(r"(?<!\w)#([-\w/]+)", text):
+        if tag not in tags:
+            tags.append(tag)
+    return tags
 
 
 def find_report_duplicates(meta: Path, canonical_name: str, legacy_pattern: str) -> list[str]:
@@ -234,6 +252,35 @@ def inspect_frontmatter(root: Path, files: list[Path]) -> list[dict[str, Any]]:
     return issues
 
 
+def inspect_pinned_inbox_frontmatter(root: Path, pinned_files: list[Path]) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    for path in pinned_files:
+        text = read_text(path)
+        raw = frontmatter(text)
+        if raw is None:
+            issues.append({"file": str(path.relative_to(root)), "issues": ["missing_frontmatter"]})
+            continue
+
+        keys = parse_frontmatter_keys(raw)
+        file_issues = [f"missing_{field}" for field in PINNED_INBOX_REQUIRED_FRONTMATTER if field not in keys]
+        learning_fields = [field for field in LEARNING_FRONTMATTER if field in keys]
+        if learning_fields:
+            file_issues.append("unexpected_learning_frontmatter")
+
+        tags = parse_yaml_list(raw, "tags")
+        for tag in ["inbox", "pinned"]:
+            if tag not in tags:
+                file_issues.append(f"missing_{tag}_tag")
+
+        type_tags = [tag for tag in tags if tag in TYPE_TAGS]
+        if len(type_tags) != 1:
+            file_issues.append("expected_exactly_one_type_tag")
+
+        if file_issues:
+            issues.append({"file": str(path.relative_to(root)), "issues": file_issues})
+    return issues
+
+
 def inspect_vault(vault: str | None = None) -> dict[str, Any]:
     root = find_vault(vault)
     inbox = root / "00 - Inbox"
@@ -264,6 +311,7 @@ def inspect_vault(vault: str | None = None) -> dict[str, Any]:
     inbox_files = [path for path in inbox.glob("*.md")] if inbox.exists() else []
     inbox_file_tags = {path: tags_from_file(path) for path in inbox_files}
     pinned_inbox_files = [path for path, file_tags in inbox_file_tags.items() if "pinned" in file_tags]
+    pinned_frontmatter_issues = inspect_pinned_inbox_frontmatter(root, pinned_inbox_files)
     orphans = [
         name
         for name, count in backlinks.items()
@@ -295,9 +343,14 @@ def inspect_vault(vault: str | None = None) -> dict[str, Any]:
                 "has_frontmatter": frontmatter(read_text(path)) is not None,
                 "tags": inbox_file_tags.get(path, []),
                 "is_pinned": "pinned" in inbox_file_tags.get(path, []),
+                "has_learning_frontmatter": bool(
+                    (raw := frontmatter(read_text(path)))
+                    and any(field in parse_frontmatter_keys(raw) for field in LEARNING_FRONTMATTER)
+                ),
             }
             for path in inbox_files
         ],
+        "pinned_inbox_frontmatter_issues": pinned_frontmatter_issues,
         "note_titles": [path.stem for path in notes.glob("*.md")] if notes.exists() else [],
         "moc_titles": [path.stem for path in mocs.glob("*.md")] if mocs.exists() else [],
         "files_scanned": len(files),
@@ -307,7 +360,7 @@ def inspect_vault(vault: str | None = None) -> dict[str, Any]:
         "orphan_count": len(orphans),
         "applied_tags": tags,
         "frontmatter_issues": inspect_frontmatter(root, files)[:200],
-        "frontmatter_standard": ["created", "modified", "tags", "aliases", "source", "status", "confidence"],
+        "frontmatter_standard": REQUIRED_FRONTMATTER,
         "report_paths": {
             "triage": str(meta / TRIAGE_REPORT_NAME),
             "consolidation": str(meta / CONSOLIDATION_REPORT_NAME),

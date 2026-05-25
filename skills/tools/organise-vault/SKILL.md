@@ -13,7 +13,7 @@ Before editing vault notes, read these files when they exist:
 2. `99 - Meta/AI Formatting/tag-vocabulary.md`
 3. Relevant templates under `99 - Meta/Templates/`
 
-Do not duplicate those rules in the skill. Pinned inbox notes tagged `pinned` are intentionally retained in `00 - Inbox/` and must not be moved unless explicitly requested. Follow the vault workflow file for YAML frontmatter, Markdown structure, MOC conventions, source handling, status values, confidence values, and report locations.
+Do not duplicate those rules in the skill. Pinned inbox notes tagged `pinned` are intentionally retained in `00 - Inbox/` and must not be moved unless explicitly requested. Pinned inbox notes keep the inbox-template YAML frontmatter, including `inbox` and `pinned` tags, but must not receive the learning frontmatter fields until they are processed or promoted. Follow the vault workflow file for YAML frontmatter, Markdown structure, MOC conventions, source handling, status values, confidence values, and report locations.
 
 ## Helper commands
 
@@ -53,7 +53,7 @@ single report files above.
 
 ## Route the task
 
-- Ad-hoc note creation: when Liam hands over notes he wrote himself (raw text, partial draft, brain-dump), format them into a single Markdown file in `00 - Inbox/` using the learning-app frontmatter template below. The note body formatting rules below still apply. The `learn-content` skill handles bulk ingestion from URLs / external markdown; this skill handles manual ad-hoc notes.
+- Ad-hoc note creation: when Liam hands over notes he wrote himself (raw text, partial draft, brain-dump), format them into a single Markdown file in `00 - Inbox/` using the frontmatter standard in `99 - Meta/AI Formatting/LLM Vault Workflow.md`. The note body formatting rules below still apply. The `learn-content` skill handles bulk ingestion from URLs / external markdown; this skill handles manual ad-hoc notes.
 - Inbox triage or source ingestion: inspect the vault, read inbox files, preserve source metadata, integrate durable knowledge into `02 - Notes/`, update relevant MOCs, and update `triage-report.md`.
 - Markdown formatting: inspect the target file, preserve YAML frontmatter, wikilinks, tags, embeds, tasks, code fences, dates, paths, and quoted text. Improve clarity without adding new claims, links, tags, action items, conclusions, or frontmatter unless explicitly asked.
 - Vault consolidation: inspect the vault, first check `previous_reports.previous_consolidation` for Liam-approved actions from the prior run, use dead links/orphans/tags/frontmatter issues as the factual baseline, refresh MOCs, make only already-approved or safe fixes, and update the single `vault-consolidation.md` file with any new recommendations that need Liam input.
@@ -69,8 +69,9 @@ When Liam invokes this skill by name, asks to process the inbox, or asks for the
    - Do not run actions whose response is `pending`, `skip`, or `defer`.
 2. Read every Markdown note in `00 - Inbox/` and the existing MOCs in `01 - MOCs/`.
 3. Format inbox notes first.
-   - Format pinned inbox notes in place.
-   - Ensure pinned inbox notes include both `inbox` and `pinned` tags.
+   - Format pinned inbox notes in place only for safe readability cleanup.
+   - Ensure pinned inbox notes keep inbox-template YAML frontmatter with `inbox` and `pinned` tags.
+   - Do not add learning frontmatter fields to pinned inbox notes, because they have not been processed.
    - Preserve pinned inbox notes in `00 - Inbox/`.
 4. Triage unpinned inbox notes.
    - Create durable notes in `02 - Notes/` for reusable knowledge.
@@ -97,9 +98,9 @@ When Liam invokes this skill by name, asks to process the inbox, or asks for the
    - On the next run, the helper will surface approved rows for execution.
 10. Finish with a concise summary of created notes, updated notes, refreshed MOCs, report paths, and remaining validation counts.
 
-## Learning-app frontmatter template
+## Learning frontmatter
 
-Use the canonical learning-app frontmatter template defined in `../_shared/learning-app-frontmatter.md`. Set `source_type: ad-hoc-note`. Do not duplicate or diverge from the shared template — read it and apply it. This applies to every ad-hoc inbox note Liam wants the app to quiz him on.
+Use `99 - Meta/AI Formatting/LLM Vault Workflow.md` as the sole source of truth for frontmatter. The learning fields defined in the vault workflow are mandatory on maintained notes after processing, including durable notes, MOCs, reports, and notes promoted from `00 - Inbox/` to `02 - Notes/`. Pinned inbox notes are intentionally unprocessed and are exempt from learning fields only: keep their inbox-template YAML frontmatter, but do not add `learning_status`, `learning_question_goal`, or `learning_question_types` while they remain pinned in `00 - Inbox/`.
 
 ## Safety
 
