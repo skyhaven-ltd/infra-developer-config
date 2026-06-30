@@ -134,13 +134,15 @@ def apply(t, plan_path, dry):
     if not template: raise SkillError('Shared pull request template not found: .github/.github/PULL_REQUEST_TEMPLATE/pull-request.md')
     plan=load_plan(plan_path); require_approved(plan); gh=exe('gh'); repo=plan.get('repository') or parse_github(remote_origin(p)); base=plan.get('base')
     if not gh or not repo: raise SkillError('gh and repository are required')
+    head=(git(p,'branch','--show-current').stdout.strip() if git_root(p) else '')
+    if not head: raise SkillError('Could not determine the current branch in --target to use as the PR head')
     title=plan.get('title'); body=plan.get('body')
     if not isinstance(title,str) or not isinstance(body,str): raise SkillError('title and body are required')
     if not base:
-        cp=run([gh,'api',f'repos/{repo}','--jq','.default_branch'],check=True); base=cp.stdout.strip()
-    cmd=[gh,'pr','create','--repo',repo,'--base',base,'--title',title,'--body',body]
+        cp=run([gh,'api',f'repos/{repo}','--jq','.default_branch'],check=True,cwd=p); base=cp.stdout.strip()
+    cmd=[gh,'pr','create','--repo',repo,'--head',head,'--base',base,'--title',title,'--body',body]
     if dry: return {'dry_run':True,'would_run':cmd[1:]}
-    cp=run(cmd,check=True); return {'created_pr_url':cp.stdout.strip().splitlines()[-1]}
+    cp=run(cmd,check=True,cwd=p); return {'created_pr_url':cp.stdout.strip().splitlines()[-1]}
 
 def main(argv=None):
     ap=argparse.ArgumentParser(); sub=ap.add_subparsers(dest='cmd',required=True); i=sub.add_parser('inspect'); i.add_argument('--target',required=True); i.add_argument('--json',action='store_true'); a=sub.add_parser('apply'); a.add_argument('--target',required=True); a.add_argument('--plan',required=True); a.add_argument('--dry-run',action='store_true'); ns=ap.parse_args(argv)
