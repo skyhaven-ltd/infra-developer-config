@@ -19,7 +19,7 @@ Inspect these JSON fields:
 - `risk_flags`: stop and resolve `repository_not_inferred`, `gh_not_found`, or `gh_not_authenticated` before applying.
 - `issue_template`: the shared template loaded from `.github/.github/ISSUE_TEMPLATE/feature-request.md`. Do not invent or use embedded issue templates.
 - `defaults`: label, assignee, and title prefix used by the helper. The helper intentionally defaults `label` to `use-type-field-instead` rather than inheriting semantic labels from the shared issue template.
-- `project`: the Sky Haven Project V2 IDs used to set Type to Feature.
+- `project`: the Sky Haven Project Board ID the issue is added to, plus the native GitHub issue type (`Feature`) the helper sets on the issue itself.
 
 ## Step 2 — Gather and draft
 
@@ -58,7 +58,7 @@ Create a plan JSON file outside the target repository, for example in `$env:TEMP
 }
 ```
 
-Optional plan fields are `label` and `assignee`; defaults are `use-type-field-instead` and `liam-goodchild`. Only override `label` for exceptional repositories; normal classification belongs in the GitHub Project Type field.
+Optional plan fields are `label` and `assignee`; defaults are `use-type-field-instead` and `liam-goodchild`. Only override `label` for exceptional repositories; classification is carried by the native GitHub issue type (set to `Feature`), not by labels.
 
 ## Step 4 — Validate or create the issue
 
@@ -74,7 +74,7 @@ After approval and validation, create the issue:
 python "C:\Local Files\Repositories\Sky Haven\ops-developer-config\skills\git\raise-feature\scripts\raise-feature-helper.py" apply --target "." --plan "$env:TEMP\feature-plan.json"
 ```
 
-The helper uses `gh issue create`, adds the created issue to the Sky Haven Project Board, and sets the **Type** field to **Feature** using option ID `c156bb04`.
+The helper uses `gh issue create`, sets the native **GitHub issue type** to **Feature** on the issue itself (root level, via the org issue-type set), and adds the created issue to the Sky Haven Project Board. It no longer writes the board's custom Type field — the issue type lives on the issue.
 
 ## Step 5 — Report back
 

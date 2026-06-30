@@ -62,7 +62,11 @@ def load_plan(path: str) -> dict[str, Any]:
 def require_approved(plan: dict[str, Any]):
     if plan.get('approved') is not True: raise SkillError('Plan must include approved=true after explicit user approval')
 
-BUG_PREFIX='[BUG] - '; DEFAULT_LABEL='use-type-field-instead'; DEFAULT_ASSIGNEE='liam-goodchild'; PROJECT_ID='PVT_kwHOB9ID-s4BU_KB'; TYPE_FIELD_ID='PVTSSF_lAHOB9ID-s4BU_KBzhRbk2o'; BUG_OPTION_ID='951d9251'
+# ISSUE_TYPE is the native (root-level) GitHub issue type shown on the issue
+# itself, distinct from any Project V2 board field. Must exist in the org issue-type set.
+BUG_PREFIX='[BUG] - '; DEFAULT_LABEL='use-type-field-instead'; DEFAULT_ASSIGNEE='liam-goodchild'; PROJECT_ID='PVT_kwDOEbaq0c4BcELw'; ISSUE_TYPE='Bug'
+def set_issue_type(gh, repo, num, type_name):
+    run([gh,'api','-X','PATCH',f'repos/{repo}/issues/{num}','-f',f'type={type_name}'],check=True)
 def parse_template(path: Path) -> dict[str,Any]:
     text=path.read_text(encoding='utf-8'); meta: dict[str,str]={}; body=text
     if text.startswith('---\n'):
@@ -95,7 +99,7 @@ def inspect(t):
     p=target_dir(t); gh=exe('gh'); remote=remote_origin(p); repo=parse_github(remote); auth={'ok':False,'summary':'gh not found'}
     if gh:
         cp=run([gh,'auth','status','-h','github.com']); auth={'ok':cp.returncode==0,'summary':'authenticated' if cp.returncode==0 else 'not authenticated'}
-    template=find_issue_template(p,'bug-report.md'); fm=template.get('frontmatter',{}) if template else {}; return {'target':str(p),'git_remote_origin':remote,'inferred_repository':repo,'gh_path':gh,'gh_auth':auth,'issue_template':template,'project':{'id':PROJECT_ID,'type_field_id':TYPE_FIELD_ID,'bug_option_id':BUG_OPTION_ID},'required_plan_fields':['repository','title','description','steps','expected','approved'],'defaults':{'label':DEFAULT_LABEL,'assignee':fm.get('assignees',DEFAULT_ASSIGNEE),'title_prefix':fm.get('title',BUG_PREFIX+'Placeholder')},'risk_flags':[k for k,b in {'repository_not_inferred':not repo,'gh_not_found':not gh,'gh_not_authenticated':gh and not auth['ok'],'issue_template_not_found':not template}.items() if b]}
+    template=find_issue_template(p,'bug-report.md'); fm=template.get('frontmatter',{}) if template else {}; return {'target':str(p),'git_remote_origin':remote,'inferred_repository':repo,'gh_path':gh,'gh_auth':auth,'issue_template':template,'project':{'id':PROJECT_ID,'issue_type':ISSUE_TYPE},'required_plan_fields':['repository','title','description','steps','expected','approved'],'defaults':{'label':DEFAULT_LABEL,'assignee':fm.get('assignees',DEFAULT_ASSIGNEE),'title_prefix':fm.get('title',BUG_PREFIX+'Placeholder')},'risk_flags':[k for k,b in {'repository_not_inferred':not repo,'gh_not_found':not gh,'gh_not_authenticated':gh and not auth['ok'],'issue_template_not_found':not template}.items() if b]}
 def req(plan,k):
     v=plan.get(k)
     if not isinstance(v,str) or not v.strip(): raise SkillError(f'{k} must be a non-empty string')
@@ -108,17 +112,16 @@ def apply(t, plan_path, dry):
     p=target_dir(t); plan=load_plan(plan_path); require_approved(plan); gh=exe('gh')
     if not gh: raise SkillError('gh executable not found')
     repo=req(plan,'repository'); template=find_issue_template(p,'bug-report.md'); fm=template.get('frontmatter',{}) if template else {}; title=normalize_title(req(plan,'title'),template); body=build_body(req(plan,'description'),req(plan,'steps'),req(plan,'expected'),template)
-    summary={'repository':repo,'title':title,'body_preview':body,'label':plan.get('label',DEFAULT_LABEL),'assignee':plan.get('assignee',fm.get('assignees',DEFAULT_ASSIGNEE)),'project':{'id':PROJECT_ID,'type':'Bug'}}
-    if dry: return {**summary,'dry_run':True,'would_create_issue':True,'would_set_project_type':True}
+    summary={'repository':repo,'title':title,'body_preview':body,'label':plan.get('label',DEFAULT_LABEL),'assignee':plan.get('assignee',fm.get('assignees',DEFAULT_ASSIGNEE)),'issue_type':ISSUE_TYPE,'project':{'id':PROJECT_ID}}
+    if dry: return {**summary,'dry_run':True,'would_create_issue':True,'would_set_issue_type':ISSUE_TYPE,'would_add_to_project':True}
     cp=run([gh,'issue','create','--repo',repo,'--title',title,'--label',summary['label'],'--assignee',summary['assignee'],'--body',body],check=True)
     url=cp.stdout.strip().splitlines()[-1]; m=re.search(r'/issues/(\d+)',url)
     if not m: raise SkillError(f'Could not parse issue URL: {url}')
+    set_issue_type(gh,repo,m.group(1),ISSUE_TYPE)
     node=run([gh,'api',f'repos/{repo}/issues/{m.group(1)}','--jq','.node_id'],check=True).stdout.strip()
     add='mutation($projectId: ID!, $contentId: ID!) { addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) { item { id } } }'
     item=gh_graphql(gh,add,{'projectId':PROJECT_ID,'contentId':node}).get('data',{}).get('addProjectV2ItemById',{}).get('item',{}).get('id')
-    setq='mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) { updateProjectV2ItemFieldValue(input: {projectId: $projectId, itemId: $itemId, fieldId: $fieldId, value: { singleSelectOptionId: $optionId }}) { projectV2Item { id } } }'
-    if item: gh_graphql(gh,setq,{'projectId':PROJECT_ID,'itemId':item,'fieldId':TYPE_FIELD_ID,'optionId':BUG_OPTION_ID})
-    return {**summary,'created_issue_url':url,'issue_number':m.group(1),'project_item_id':item,'project_type_set':'Bug'}
+    return {**summary,'created_issue_url':url,'issue_number':m.group(1),'project_item_id':item,'issue_type_set':ISSUE_TYPE}
 def main(argv=None):
     ap=argparse.ArgumentParser(); sub=ap.add_subparsers(dest='cmd',required=True); i=sub.add_parser('inspect'); i.add_argument('--target',required=True); i.add_argument('--json',action='store_true'); a=sub.add_parser('apply'); a.add_argument('--target',required=True); a.add_argument('--plan',required=True); a.add_argument('--dry-run',action='store_true'); ns=ap.parse_args(argv)
     try: out(inspect(ns.target) if ns.cmd=='inspect' else apply(ns.target,ns.plan,ns.dry_run)); return 0

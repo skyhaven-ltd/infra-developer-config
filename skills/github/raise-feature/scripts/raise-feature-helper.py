@@ -22,11 +22,12 @@ from typing import Any
 from urllib.parse import urlparse
 
 FEATURE_PREFIX = "[FEATURE] - "
+# Native, repository/organisation-level GitHub issue type (shown on the issue
+# itself), as opposed to a Project V2 board field. This is the "root level" type.
+ISSUE_TYPE = "Feature"
 DEFAULT_LABEL = "use-type-field-instead"
 DEFAULT_ASSIGNEE = "liam-goodchild"
-PROJECT_ID = "PVT_kwHOB9ID-s4BU_KB"
-TYPE_FIELD_ID = "PVTSSF_lAHOB9ID-s4BU_KBzhRbk2o"
-FEATURE_OPTION_ID = "c156bb04"
+PROJECT_ID = "PVT_kwDOEbaq0c4BcELw"
 REPO_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 ISSUE_URL_PATTERN = re.compile(r"https://github\.com/([^/]+/[^/]+)/issues/(\d+)")
 
@@ -189,8 +190,7 @@ def inspect_target(target_arg: str) -> dict[str, Any]:
         "issue_template": template,
         "project": {
             "id": PROJECT_ID,
-            "type_field_id": TYPE_FIELD_ID,
-            "feature_option_id": FEATURE_OPTION_ID,
+            "issue_type": ISSUE_TYPE,
         },
         "required_plan_fields": ["repository", "title", "problem", "solution", "approved"],
         "defaults": {
@@ -325,26 +325,15 @@ def add_issue_to_project(gh: str, issue_node_id: str) -> str:
     return item_id
 
 
-def set_project_type_feature(gh: str, item_id: str) -> None:
-    query = """
-      mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-        updateProjectV2ItemFieldValue(input: {
-          projectId: $projectId
-          itemId: $itemId
-          fieldId: $fieldId
-          value: { singleSelectOptionId: $optionId }
-        }) { projectV2Item { id } }
-      }
+def set_issue_type(gh: str, repository: str, issue_number: str, type_name: str) -> None:
+    """Set the native (root-level) GitHub issue type, e.g. Feature / Bug / Task.
+
+    This is the type shown on the issue itself and is distinct from any Project V2
+    board field. Requires the type to exist in the organisation's issue-type set.
     """
-    graphql(
-        gh,
-        query,
-        {
-            "projectId": PROJECT_ID,
-            "itemId": item_id,
-            "fieldId": TYPE_FIELD_ID,
-            "optionId": FEATURE_OPTION_ID,
-        },
+    run_command(
+        [gh, "api", "-X", "PATCH", f"repos/{repository}/issues/{issue_number}", "-f", f"type={type_name}"],
+        check=True,
     )
 
 
@@ -365,22 +354,23 @@ def apply_plan(target_arg: str, plan_path: str, *, dry_run: bool) -> dict[str, A
         "body_preview": normalized["body"],
         "label": normalized["label"],
         "assignee": normalized["assignee"],
-        "project": {"id": PROJECT_ID, "type": "Feature"},
+        "issue_type": ISSUE_TYPE,
+        "project": {"id": PROJECT_ID},
     }
     if dry_run:
-        return {**summary, "would_create_issue": True, "would_set_project_type": True}
+        return {**summary, "would_create_issue": True, "would_set_issue_type": ISSUE_TYPE, "would_add_to_project": True}
 
     issue = create_issue(gh, normalized)
+    set_issue_type(gh, normalized["repository"], issue["number"], ISSUE_TYPE)
     issue_node_id = get_issue_node_id(gh, normalized["repository"], issue["number"])
     project_item_id = add_issue_to_project(gh, issue_node_id)
-    set_project_type_feature(gh, project_item_id)
     return {
         **summary,
         "created_issue_url": issue["url"],
         "issue_number": issue["number"],
         "issue_node_id": issue_node_id,
         "project_item_id": project_item_id,
-        "project_type_set": "Feature",
+        "issue_type_set": ISSUE_TYPE,
     }
 
 

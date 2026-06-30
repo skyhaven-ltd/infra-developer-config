@@ -28,7 +28,7 @@ Use the bundled Python helper for deterministic repository detection, shared iss
    }
    ```
 
-   Optional plan fields are `label` and `assignee`; defaults are `use-type-field-instead` and `liam-goodchild`. Only override `label` for exceptional repositories; normal classification belongs in the GitHub Project Type field.
+   Optional plan fields are `label` and `assignee`; defaults are `use-type-field-instead` and `liam-goodchild`. Only override `label` for exceptional repositories; classification is carried by the native GitHub issue type (set to `Bug`), not by labels.
 
 5. Dry-run, then create:
 
