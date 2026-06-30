@@ -1,4 +1,0 @@
-interface:
-  display_name: "Create ADO Work Item"
-  short_description: "Create Azure DevOps work items from templates"
-  default_prompt: "Use $create-ado-work-item to create a CAF Azure DevOps work item from a saved template."
