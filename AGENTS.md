@@ -77,17 +77,12 @@ Naming schema: `{verb}-{subject}[-{qualifier}]`
 
 **Create**
 
-| Skill           | Purpose                             |
-| --------------- | ----------------------------------- |
-| `create-pr-ado` | Create an Azure DevOps pull request |
-| `create-pr-gh`  | Create a GitHub pull request        |
+| Skill         | Purpose                                            |
+| ------------- | -------------------------------------------------- |
+| `create-pr`   | Create a pull request (GitHub or Azure DevOps)     |
+| `raise-issue` | Raise a classified GitHub issue (bug/feature/task) |
 
-**Config**
-
-| Skill             | Purpose                            |
-| ----------------- | ---------------------------------- |
-| `config-repo-ado` | Standard ADO repo configuration    |
-| `config-repo-gh`  | Standard GitHub repo configuration |
+> Repository creation and configuration are handled by Terraform; the former `config-repo-gh` / `config-repo-ado` skills have been decommissioned.
 
 **Git**
 
