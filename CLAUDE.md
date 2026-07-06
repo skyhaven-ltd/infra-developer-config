@@ -24,6 +24,7 @@ Tracked in version control (enforced by `.gitignore`):
 | `git/gitignore_global`                | Git                 | Global gitignore patterns                                                                      |
 | `scripts/Install-DeveloperConfig.ps1` | All                 | One-shot link creation for a new Windows machine; can install a per-user logon task for itself |
 | `scripts/Update-GitRepositories.ps1`  | Git                 | Pulls all repositories under a configurable root; can install a per-user logon task for itself |
+| `scripts/Sync-DeveloperMachine.ps1`   | All                 | Single entry point: ensures its own per-user logon task, clones missing org repos, pulls all, then runs the installer |
 | `docs/`                               | â€”                   | Per-tool setup documentation                                                                   |
 
 Everything else in each tool's config directory (sessions, history, cache,
@@ -104,6 +105,21 @@ Naming schema: `{verb}-{subject}[-{qualifier}]`
 | `learn` | Quiz on recent code changes to reinforce understanding |
 
 ## Common Tasks
+
+### Syncing a whole machine (single script)
+
+`scripts/Sync-DeveloperMachine.ps1` is the idempotent single entry point — run it once manually on a new machine and it maintains itself from then on. Each run it:
+
+1. Registers/refreshes its own per-user logon scheduled task (RunLevel Limited, no admin needed) and removes the legacy "Git Pull All Repositories" / "Install Developer Config" tasks
+2. Lists non-archived repos in the `skyhaven-ltd` GitHub org (via `gh`) and clones any missing under `<RepositoriesRoot>\Sky Haven` — new org repos appear automatically on the next run
+3. Runs `Update-GitRepositories.ps1` to `git pull --ff-only` every repo under the root (honouring the per-machine include list in `scripts/git-repositories/<COMPUTERNAME>.txt`)
+4. Runs `Install-DeveloperConfig.ps1`, which installs skills into `~/.claude/skills`, `~/.codex/skills`, **and** any existing profile variants (`~/.claude-*`, `~/.codex-*`, e.g. `.claude-work` for enterprise accounts)
+
+```powershell
+.\scripts\Sync-DeveloperMachine.ps1   # one-time bootstrap; installs its own logon task
+```
+
+Requires `gh auth login` (and `gh auth setup-git` for HTTPS clone credentials). Use `-SkipClone` when offline, `-NoScheduledTask` for a one-off run that leaves tasks alone.
 
 ### Adding a new skill
 
