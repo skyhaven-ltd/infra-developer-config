@@ -17,6 +17,7 @@ Tracked in version control (enforced by `.gitignore`):
 | `claude/CLAUDE.md`                    | Claude Code         | Global Claude instructions installed to `~/.claude/CLAUDE.md`                                  |
 | `git/hooks/`                          | Git                 | Global git hooks (pre-commit, etc.)                                                            |
 | `codex/instructions.md`               | Codex CLI           | System prompt / custom instructions                                                            |
+| `codex/AGENTS.md`                     | Codex CLI           | Global agent guidance installed to `~/.codex/AGENTS.md`                                        |
 | `codex/config.toml`                   | Codex CLI           | Model, reasoning effort, options                                                               |
 | `vscode/settings.json`                | VS Code             | Editor and extension settings                                                                  |
 | `vscode/keybindings.json`             | VS Code             | Custom keyboard shortcuts                                                                      |

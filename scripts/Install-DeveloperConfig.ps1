@@ -634,6 +634,7 @@ Merge-ClaudeSettings "$Repo\claude\settings.json" "$claude\settings.json"
 
 Write-Host "`nCodex" -ForegroundColor Cyan
 New-Symlink "$codex\instructions.md" "$Repo\codex\instructions.md"
+New-Symlink "$codex\AGENTS.md" "$Repo\codex\AGENTS.md"
 Merge-CodexConfig "$Repo\codex\config.toml" "$codex\config.toml"
 
 # -- VS Code ---------------------------------------------------------------
