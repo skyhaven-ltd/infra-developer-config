@@ -4,9 +4,14 @@
 
 .DESCRIPTION
     Recursively discovers Git working trees below -RepositoriesRoot and runs
-    "git pull --ff-only" in each repository. Fast-forward-only pulls are used by
-    default so an unattended scheduled task does not create merge commits or
-    prompt for conflict resolution.
+    "git pull --no-tags --ff-only" in each repository. Fast-forward-only pulls
+    are used by default so an unattended scheduled task does not create merge
+    commits or prompt for conflict resolution.
+
+    Tags are deliberately kept out of local clones: before each pull the script
+    deletes any existing local tags, pulls with --no-tags so the underlying
+    fetch never brings tags back, and sets remote.origin.tagOpt to --no-tags so
+    other automated fetches in the clone stay tag-free.
 
     The script can also register a per-user scheduled task that runs at user
     logon. This does not require local administrator privileges.
@@ -44,9 +49,10 @@
     $env:LOCALAPPDATA\ops-developer-config\git-pull-all.log
 
 .PARAMETER AllowMerge
-    Run "git pull" instead of "git pull --ff-only". This is not recommended for
-    unattended scheduled runs because it may create merge commits or require
-    conflict resolution.
+    Run "git pull --no-tags" instead of "git pull --no-tags --ff-only". This is
+    not recommended for unattended scheduled runs because it may create merge
+    commits or require conflict resolution. Tag deletion and --no-tags apply
+    either way.
 
 .EXAMPLE
     .\Update-GitRepositories.ps1
@@ -327,7 +333,7 @@ if ($repositories.Count -eq 0) {
 }
 
 $failed = New-Object System.Collections.Generic.List[string]
-$pullArguments = @("pull")
+$pullArguments = @("pull", "--no-tags")
 if (-not $AllowMerge) {
     $pullArguments += "--ff-only"
 }
@@ -335,6 +341,20 @@ if (-not $AllowMerge) {
 foreach ($repository in $repositories) {
     Write-Host "Pulling $($repository.Path)"
     Add-Content -LiteralPath $LogPath -Value "[$(Get-Date -Format "yyyy-MM-dd HH:mm:ssK")] Pulling $($repository.Path)"
+
+    $localTags = @(& git -C $repository.Path tag | Where-Object { $_ })
+    if ($localTags.Count -gt 0) {
+        & git -C $repository.Path tag -d @localTags | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $failed.Add($repository.Path)
+            Add-Content -LiteralPath $LogPath -Value "ERROR: git tag -d failed with exit code $LASTEXITCODE"
+            Write-Host "  tag deletion failed with exit code $LASTEXITCODE" -ForegroundColor Red
+        } else {
+            Add-Content -LiteralPath $LogPath -Value "Deleted $($localTags.Count) local tag(s): $($localTags -join ', ')"
+        }
+    }
+
+    & git -C $repository.Path config remote.origin.tagOpt --no-tags
 
     $output = & git -C $repository.Path @pullArguments
     $exitCode = $LASTEXITCODE

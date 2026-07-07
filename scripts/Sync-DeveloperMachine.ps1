@@ -313,7 +313,7 @@ if ($SkipClone) {
         }
 
         Write-Log "Cloning $Organization/$($repository.name) -> $targetPath"
-        & git clone "https://github.com/$Organization/$($repository.name).git" $targetPath
+        & git clone --no-tags "https://github.com/$Organization/$($repository.name).git" $targetPath
         if ($LASTEXITCODE -ne 0) {
             $failedClones.Add($repository.name)
             Write-Log "ERROR: clone failed for $($repository.name) (exit code $LASTEXITCODE)"
