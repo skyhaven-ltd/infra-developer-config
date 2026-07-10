@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove local Git refs whose branch work is safely stored on origin."""
+"""Update the default branch and remove local Git refs safely stored on origin."""
 
 from __future__ import annotations
 
@@ -100,16 +100,33 @@ def discover(root: Path, fetch: bool = True) -> Plan:
         if branch == default:
             retained.append(RetainedBranch(branch, "origin default branch"))
             continue
+        if branch in worktree_branches and branch != current:
+            retained.append(RetainedBranch(branch, "checked out in another worktree"))
+            continue
         remote = f"origin/{branch}"
         if remote not in remote_branches:
-            retained.append(RetainedBranch(branch, "no same-named branch on origin"))
+            merged = run_git(
+                root,
+                "merge-base",
+                "--is-ancestor",
+                branch,
+                f"origin/{default}",
+                check=False,
+            )
+            if merged.returncode == 0:
+                deletable.append(branch)
+                continue
+            local_only = lines(run_git(root, "rev-list", branch, "--not", f"origin/{default}"))
+            retained.append(
+                RetainedBranch(
+                    branch,
+                    f"no branch on origin and {len(local_only)} commit(s) are not in origin/{default}",
+                )
+            )
             continue
         local_only = lines(run_git(root, "rev-list", branch, "--not", remote))
         if local_only:
             retained.append(RetainedBranch(branch, f"{len(local_only)} commit(s) exist only locally"))
-            continue
-        if branch in worktree_branches and branch != current:
-            retained.append(RetainedBranch(branch, "checked out in another worktree"))
             continue
         deletable.append(branch)
 
@@ -124,8 +141,8 @@ def ensure_clean(root: Path) -> None:
 
 def apply_plan(root: Path, plan: Plan) -> None:
     ensure_clean(root)
-    if plan.current_branch in plan.delete_branches:
-        run_git(root, "switch", plan.default_branch)
+    run_git(root, "switch", plan.default_branch)
+    run_git(root, "pull", "--ff-only", "origin", plan.default_branch)
     for branch in plan.delete_branches:
         run_git(root, "branch", "-D", "--", branch)
     if plan.delete_tags:

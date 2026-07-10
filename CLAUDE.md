@@ -85,7 +85,6 @@ Naming schema: `{verb}-{subject}[-{qualifier}]`
 
 | Skill             | Purpose                                    |
 | ----------------- | ------------------------------------------ |
-| `git-cleanup`     | Delete merged branches, prune remotes      |
 | `git-commit-push` | Stage, commit, and push with safety checks |
 
 **Microsoft Foundry**
