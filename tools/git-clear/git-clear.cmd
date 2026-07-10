@@ -1,2 +1,2 @@
 @echo off
-python "%~dp0git-clear.py" %*
+py -3 "%~dp0git-clear.py" %*

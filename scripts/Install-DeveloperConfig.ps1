@@ -292,7 +292,7 @@ function Install-GitClear {
     # launched it. Install an alias as well so `git clear` works immediately,
     # while the PATH-installed external command supports future shells.
     $gitClearScript = (Join-Path $binDirectory "git-clear.py").Replace("\", "/")
-    $gitClearAlias = "!python `"$gitClearScript`""
+    $gitClearAlias = "!py -3 `"$gitClearScript`""
     git config --global alias.clear $gitClearAlias
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to configure the global Git alias 'clear'."

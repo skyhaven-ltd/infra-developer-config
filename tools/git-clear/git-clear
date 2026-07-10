@@ -2,4 +2,4 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec python3 "${script_dir}/git-clear.py" "$@"
+exec py -3 "${script_dir}/git-clear.py" "$@"
