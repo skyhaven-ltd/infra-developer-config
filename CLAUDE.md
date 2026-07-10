@@ -14,15 +14,10 @@ Tracked in version control (enforced by `.gitignore`):
 | ------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
 | `skills/`                             | Claude Code + Codex | Shared skill source; linked into `~/.claude/skills` and `~/.codex/skills/<name>`               |
 | `claude/settings.json`                | Claude Code         | Global tool permissions and model config                                                       |
-| `claude/CLAUDE.md`                    | Claude Code         | Global Claude instructions installed to `~/.claude/CLAUDE.md`                                  |
+| `system/SYSTEM.md`                    | Claude Code + Codex | Canonical global instructions installed under each tool's required filename                    |
 | `git/hooks/`                          | Git                 | Global git hooks (pre-commit, etc.)                                                            |
-| `codex/instructions.md`               | Codex CLI           | System prompt / custom instructions                                                            |
-| `codex/AGENTS.md`                     | Codex CLI           | Global agent guidance installed to `~/.codex/AGENTS.md`                                        |
 | `codex/config.toml`                   | Codex CLI           | Model, reasoning effort, options                                                               |
-| `vscode/settings.json`                | VS Code             | Editor and extension settings                                                                  |
-| `vscode/keybindings.json`             | VS Code             | Custom keyboard shortcuts                                                                      |
 | `git/config.shared`                   | Git                 | Shared aliases and core settings (via `[include]`)                                             |
-| `git/gitignore_global`                | Git                 | Global gitignore patterns                                                                      |
 | `scripts/Install-DeveloperConfig.ps1` | All                 | One-shot link creation for a new Windows machine; can install a per-user logon task for itself |
 | `scripts/Update-GitRepositories.ps1`  | Git                 | Pulls all repositories under a configurable root; can install a per-user logon task for itself |
 | `scripts/Sync-DeveloperMachine.ps1`   | All                 | Single entry point: ensures its own per-user logon task, clones missing org repos, pulls all, then runs the installer |
@@ -138,7 +133,7 @@ cd "C:\Local Files\Repositories\Sky Haven\ops-developer-config"
 .\scripts\Install-DeveloperConfig.ps1
 ```
 
-The script creates junctions for skill directories and file symlinks where possible. The global Claude instructions come from `claude/CLAUDE.md`; root-level `CLAUDE.md` remains repo-local documentation for this configuration repository.
+The script creates junctions for skill directories and file symlinks where possible. Global Claude and Codex instructions come from `system/SYSTEM.md`; root-level `CLAUDE.md` and `AGENTS.md` remain repo-local documentation for this configuration repository.
 Codex skills are linked under `~/.codex/skills`; the legacy `~/.agents/skills`
 path is cleaned up only when it is the old junction to this repo.
 On domain-joined machines where Group Policy blocks symlink creation, it falls

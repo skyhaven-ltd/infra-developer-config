@@ -1,33 +1,26 @@
 ---
 name: git-cleanup
-description: Checkout default branch, delete merged local branches, prune remotes, and pull latest
+description: Remove local branches safely stored on origin and delete all local tags
 ---
 
-Use the bundled Python helper for deterministic branch/tag discovery and Git command execution. Do not prompt for approval; explain the cleanup plan, create it, dry-run it, and apply it.
+Use the installed `git clear` command. It deletes a local branch only when a
+same-named branch exists on `origin` and the local branch has no commits absent
+from that remote branch. It deletes all local tags because tags are managed by
+CI/CD on the remote.
 
-1. Inspect the repository:
-
-   ```powershell
-   python "<skill-dir>\scripts\git-cleanup-helper.py" inspect --target "." --json
-   ```
-
-2. Show `default_branch`, `deletable_branches`, and `deletable_tags`, then continue without asking for approval.
-
-3. Create a plan outside the repo:
-
-   ```json
-   {
-     "delete_branches": ["old-branch"],
-     "delete_tags": ["old-tag"],
-     "pull": true
-   }
-   ```
-
-4. Dry-run, then apply:
+1. Show the deterministic dry run:
 
    ```powershell
-   python "<skill-dir>\scripts\git-cleanup-helper.py" apply --target "." --plan "$env:TEMP\git-cleanup.json" --dry-run
-   python "<skill-dir>\scripts\git-cleanup-helper.py" apply --target "." --plan "$env:TEMP\git-cleanup.json"
+   git clear
    ```
 
-5. Report deleted branches, deleted tags, fetch/prune, and pull results. The helper uses `git fetch --prune --no-tags` and `git pull --no-tags` so deleted tags are not refetched.
+2. Explain the branches and tags that will be deleted, then continue without
+   prompting for approval and apply the freshly recalculated plan:
+
+   ```powershell
+   git clear --apply
+   ```
+
+3. Report the deleted and retained refs. If the command refuses because of
+   local changes or local-only commits, report that rather than bypassing the
+   safety check.

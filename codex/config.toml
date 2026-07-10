@@ -4,7 +4,6 @@
 
 model = "gpt-5.5"
 model_reasoning_effort = "medium"
-model_instructions_file = "~/.codex/instructions.md"
 
 # Permissions — mirrors Claude Code's broad allow list
 approval_policy = "never"
