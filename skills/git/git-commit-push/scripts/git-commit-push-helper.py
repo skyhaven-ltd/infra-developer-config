@@ -175,8 +175,9 @@ def has_origin(repo: Path) -> bool:
     return result.returncode == 0
 
 
-def is_ops_developer_config_repo(repo: Path) -> bool:
-    return any(part.lower() == "ops-developer-config" for part in repo.parts)
+def is_developer_config_repo(repo: Path) -> bool:
+    allowed_names = {"infra-developer-config", "ops-developer-config"}
+    return any(part.lower() in allowed_names for part in repo.parts)
 
 
 def safe_repo_path(repo: Path, rel_path: str) -> Path | None:
@@ -313,7 +314,7 @@ def inspect_repo(repo_arg: str) -> dict[str, Any]:
     status = run_git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], text=False)
     entries = parse_status_z(status.stdout)
     protected_branch = branch in PROTECTED_BRANCHES
-    protected_branch_allowed = protected_branch and is_ops_developer_config_repo(repo)
+    protected_branch_allowed = protected_branch and is_developer_config_repo(repo)
     blocked = protected_branch and not protected_branch_allowed
 
     return {
@@ -322,7 +323,7 @@ def inspect_repo(repo_arg: str) -> dict[str, Any]:
         "protected_branch": protected_branch,
         "protected_branch_allowed": protected_branch_allowed,
         "blocked": blocked,
-        "block_reason": "on main/master outside ops-developer-config" if blocked else None,
+        "block_reason": "on main/master outside a developer-config repository" if blocked else None,
         "has_changes": bool(entries),
         "changed_file_count": len(entries),
         "changed_files": entries,

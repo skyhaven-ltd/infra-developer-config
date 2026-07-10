@@ -17,7 +17,9 @@ Use the bundled Python helper for deterministic checks, staging, commits, and pu
 
 2. Stop if `has_changes` is `false`.
 
-3. Stop if `blocked` is `true`. The helper blocks `main`/`master` except when the repository path is inside `ops-developer-config`.
+3. Stop if `blocked` is `true`. The helper blocks `main`/`master` except when
+   the repository path is inside `infra-developer-config` (or its legacy name,
+   `ops-developer-config`).
 
 4. If `risk_flags` is non-empty, summarize the flagged paths/reasons and ask before proceeding. Risk flags include likely secrets, `.env` files, binaries, and large files.
 
