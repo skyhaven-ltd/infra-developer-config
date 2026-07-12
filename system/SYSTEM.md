@@ -47,3 +47,6 @@ Invoke the matching installed skill when the user names it or asks for the
 operation. Read-only Git inspection (`git status`, `git log`, `git diff`,
 `git blame`, and branch listing) is normal tool use. Never perform the mutating
 operations above without the matching skill.
+
+When using these skills, agents may create only branches whose names begin with
+`patch/`, `minor/`, or `major/`.
