@@ -18,6 +18,20 @@ security, and simplicity, in that order.
 - Prefer idempotent operations.
 - Root README files should always follow the schema outlined in the generate-readme skill
 
+## Obsidian vault
+
+The Obsidian vault is the durable knowledge store, for the user and for future
+agent sessions. Its location differs per machine.
+
+- Resolve the vault root from the `OBSIDIAN_VAULT_PATH` environment variable.
+  It is set per machine by `scripts/Install-DeveloperConfig.ps1`.
+- If the variable is unset, ask the user for the vault path rather than
+  guessing or searching the filesystem; suggest they persist it with
+  `Install-DeveloperConfig.ps1 -ObsidianVaultPath "<vault root>"`.
+- Notes written to the vault must follow its conventions: frontmatter,
+  `[[wikilinks]]` to related notes, and index-note linking, so agent-written
+  notes match hand-written ones.
+
 ## Git and work-item workflow
 
 Always use these skills for these operations; never use the underlying mutating
