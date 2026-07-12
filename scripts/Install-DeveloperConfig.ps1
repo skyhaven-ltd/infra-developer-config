@@ -31,17 +31,26 @@
 .PARAMETER TaskName
     Name of the per-user scheduled task created by -InstallScheduledTask.
 
+.PARAMETER ObsidianVaultPath
+    Absolute path to this machine's Obsidian vault root (the directory that
+    contains .obsidian). Persisted as the OBSIDIAN_VAULT_PATH user environment
+    variable so Claude Code, Codex, and skills can locate the vault without
+    per-session setup. Only needs to be passed once per machine; subsequent
+    runs keep the stored value.
+
 .EXAMPLE
     .\Install-DeveloperConfig.ps1
     .\Install-DeveloperConfig.ps1 -Repo "C:\Local Files\Repositories\ops-developer-config"
     .\Install-DeveloperConfig.ps1 -InstallScheduledTask
+    .\Install-DeveloperConfig.ps1 -ObsidianVaultPath "D:\Obsidian Vault\AI Research"
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
     [string]$Repo = (Resolve-Path "$PSScriptRoot\..").Path,
     [switch]$InstallScheduledTask,
-    [string]$TaskName = "Install Developer Config"
+    [string]$TaskName = "Install Developer Config",
+    [string]$ObsidianVaultPath
 )
 
 Set-StrictMode -Version Latest
@@ -550,6 +559,44 @@ function Merge-CodexConfig {
     Write-Host "  [merge]  $Destination <= shared permissions/sandbox settings" -ForegroundColor Green
 }
 
+function Set-ObsidianVaultPath {
+    param([string]$RequestedPath)
+
+    $variableName = "OBSIDIAN_VAULT_PATH"
+    $current = [Environment]::GetEnvironmentVariable($variableName, "User")
+
+    if ($RequestedPath) {
+        $resolved = (Resolve-Path -LiteralPath $RequestedPath -ErrorAction Stop).Path
+        if (-not (Test-Path -LiteralPath (Join-Path $resolved ".obsidian") -PathType Container)) {
+            throw "Not an Obsidian vault (no .obsidian directory): $resolved"
+        }
+
+        if ($current -and ((ConvertTo-ComparablePath $current) -ieq (ConvertTo-ComparablePath $resolved))) {
+            Write-Host "  [skip] $variableName already set to $current" -ForegroundColor DarkGray
+        } else {
+            [Environment]::SetEnvironmentVariable($variableName, $resolved, "User")
+            Write-Host "  [env]  $variableName = $resolved" -ForegroundColor Green
+        }
+
+        # Update the current process too so tools launched from this shell see it.
+        Set-Item -Path "Env:$variableName" -Value $resolved
+        return
+    }
+
+    if (-not $current) {
+        Write-Host "  [warn] $variableName is not set. Agents cannot locate the Obsidian vault on this machine." -ForegroundColor Yellow
+        Write-Host "         Set it once with: .\Install-DeveloperConfig.ps1 -ObsidianVaultPath `"<vault root>`"" -ForegroundColor Yellow
+        return
+    }
+
+    if (Test-Path -LiteralPath (Join-Path $current ".obsidian") -PathType Container) {
+        Write-Host "  [skip] $variableName already set to $current" -ForegroundColor DarkGray
+    } else {
+        Write-Host "  [warn] $variableName points at $current but no .obsidian directory was found there." -ForegroundColor Yellow
+        Write-Host "         Fix it with: .\Install-DeveloperConfig.ps1 -ObsidianVaultPath `"<vault root>`"" -ForegroundColor Yellow
+    }
+}
+
 function ConvertTo-TaskArgument {
     param(
         [Parameter(Mandatory = $true)]
@@ -705,6 +752,11 @@ Remove-ManagedFileLink "$codex\instructions.md" "$Repo\codex\instructions.md" | 
 Remove-ManagedFileLink "$codex\AGENTS.md" "$Repo\codex\AGENTS.md" | Out-Null
 New-Symlink "$codex\AGENTS.md" $systemInstructions
 Merge-CodexConfig "$Repo\codex\config.toml" "$codex\config.toml"
+
+# -- Obsidian ----------------------------------------------------------------
+
+Write-Host "`nObsidian" -ForegroundColor Cyan
+Set-ObsidianVaultPath $ObsidianVaultPath
 
 # -- Git -------------------------------------------------------------------
 
