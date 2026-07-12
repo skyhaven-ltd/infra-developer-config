@@ -21,9 +21,9 @@ This skill must be self-contained. Do not depend on external vault workflow note
 
 Always write the generated learning material to a Markdown file in the user's Obsidian vault.
 
-- Assume the current working directory is the vault root or inside the vault.
-- Use the current working directory as the vault context.
-- Do not spend time detecting or validating the vault before writing the note.
+- Resolve the vault from the `OBSIDIAN_VAULT_PATH` environment variable when it is set; the helper script does this automatically whenever `--vault "."` is used.
+- If `OBSIDIAN_VAULT_PATH` is unset, assume the current working directory is the vault root or inside the vault and use it as the vault context.
+- Do not spend time detecting or validating the vault beyond this before writing the note.
 - Create exactly one Markdown file per user request, even when the user provides many URLs, Markdown files, pasted notes, or mixed source types.
 - Do not split dissimilar-but-related sources into multiple notes unless the user explicitly asks for separate files.
 - In the final chat response, only report the created file path and a concise summary of what was written. Do not paste the full note content unless the user explicitly asks to preview it.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -121,6 +122,13 @@ def inspect_urls(urls: list[str]) -> dict[str, Any]:
 
 
 def find_vault(start_text: str) -> Path:
+    # An explicit path wins; the default "." falls back to the machine-level
+    # OBSIDIAN_VAULT_PATH convention set by Install-DeveloperConfig.ps1.
+    if start_text in ("", "."):
+        env_vault = os.environ.get("OBSIDIAN_VAULT_PATH")
+        if env_vault:
+            start_text = env_vault
+
     start = Path(start_text).expanduser().resolve()
     current = start if start.is_dir() else start.parent
 
