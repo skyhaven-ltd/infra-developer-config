@@ -18,6 +18,20 @@ security, and simplicity, in that order.
 - Prefer idempotent operations.
 - Root README files should always follow the schema outlined in the generate-readme skill
 
+## Cloud profiles
+
+When the user names a cloud profile for Azure or GitHub work:
+
+- Confirm it exists with `cloud-profile --show <profile>`.
+- Prefix every Azure CLI command with `cloud-profile <profile> -- az`.
+- Prefix every GitHub CLI command with `cloud-profile <profile> -- gh`.
+- Use `cloud-profile <profile> -- ghorg <path>` for an API endpoint beneath
+  the profile's configured GitHub organisation.
+- Do not invoke `az` or `gh` directly or rely on profile state from an earlier
+  tool call; agent shell processes may be isolated.
+- Do not use `--validate none` unless the user explicitly asks for an
+  authentication diagnostic that requires bypassing identity validation.
+
 ## Obsidian vault
 
 The Obsidian vault is the durable knowledge store, for the user and for future

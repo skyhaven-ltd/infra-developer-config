@@ -112,6 +112,61 @@ function New-Symlink {
     $script:copyFallback++
 }
 
+function Install-CloudContext {
+    param([string]$RepoPath)
+
+    $source = Join-Path $RepoPath "tools\cloud-context"
+    if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+        Write-Host "  [skip] cloud-context source is not present" -ForegroundColor DarkGray
+        return
+    }
+
+    $documents = [Environment]::GetFolderPath("MyDocuments")
+    $moduleRoots = @(
+        (Join-Path $documents "WindowsPowerShell\Modules\CloudContext")
+        (Join-Path $documents "PowerShell\Modules\CloudContext")
+    )
+    foreach ($moduleRoot in $moduleRoots) {
+        New-Junction $moduleRoot $source
+    }
+
+    $binDirectory = Join-Path $env:USERPROFILE ".local\bin"
+    New-Item -ItemType Directory -Path $binDirectory -Force | Out-Null
+    foreach ($fileName in @("cloud-profile.py", "cloud-profile.cmd", "cloud-profile")) {
+        $destination = Join-Path $binDirectory $fileName
+        Copy-Item -LiteralPath (Join-Path $source $fileName) -Destination $destination -Force
+        Write-Host "  [copy]    $destination <- $source\$fileName" -ForegroundColor Green
+    }
+
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $pathEntries = @($userPath -split ";" | Where-Object { $_ })
+    if (-not ($pathEntries | Where-Object { $_.TrimEnd("\") -ieq $binDirectory.TrimEnd("\") })) {
+        [Environment]::SetEnvironmentVariable("Path", ((@($pathEntries) + $binDirectory) -join ";"), "User")
+        Write-Host "  [path]    added $binDirectory to the user PATH" -ForegroundColor Green
+    }
+    if (-not (($env:Path -split ";") | Where-Object { $_.TrimEnd("\") -ieq $binDirectory.TrimEnd("\") })) {
+        $env:Path = "$env:Path;$binDirectory"
+    }
+
+    $restoreCommand = "Import-Module CloudContext; Restore-CloudProfile; Enable-CloudProfilePrompt"
+    foreach ($profileDirectoryName in @("WindowsPowerShell", "PowerShell")) {
+        $profileDirectory = Join-Path $documents $profileDirectoryName
+        $profilePath = Join-Path $profileDirectory "profile.ps1"
+        New-Item -ItemType Directory -Path $profileDirectory -Force | Out-Null
+        if (-not (Test-Path -LiteralPath $profilePath -PathType Leaf)) {
+            New-Item -ItemType File -Path $profilePath -Force | Out-Null
+        }
+
+        $profileContent = Get-Content -LiteralPath $profilePath -Raw
+        if ($profileContent -notmatch "(?m)^Import-Module CloudContext; Restore-CloudProfile; Enable-CloudProfilePrompt$") {
+            Add-Content -LiteralPath $profilePath -Value "`r`n# Restore and display the isolated Azure and GitHub CLI context.`r`n$restoreCommand"
+            Write-Host "  [profile] added cloud-context restore to $profilePath" -ForegroundColor Green
+        } else {
+            Write-Host "  [skip] cloud-context restore already configured in $profilePath" -ForegroundColor DarkGray
+        }
+    }
+}
+
 function ConvertTo-ComparablePath {
     param([string]$Path)
     try {
@@ -757,6 +812,11 @@ Merge-CodexConfig "$Repo\codex\config.toml" "$codex\config.toml"
 
 Write-Host "`nObsidian" -ForegroundColor Cyan
 Set-ObsidianVaultPath $ObsidianVaultPath
+
+# -- Cloud contexts -----------------------------------------------------------
+
+Write-Host "`nCloud contexts" -ForegroundColor Cyan
+Install-CloudContext $Repo
 
 # -- Git -------------------------------------------------------------------
 
