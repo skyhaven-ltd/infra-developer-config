@@ -325,7 +325,15 @@ if ($SkipClone) {
 
 Write-Log "Pulling repositories under: $repositoriesRootPath"
 $pullFailed = $false
-& (Join-Path $scriptsDirectory "Update-GitRepositories.ps1") -RepositoriesRoot $repositoriesRootPath
+$updateArguments = @{
+    RepositoriesRoot = $repositoriesRootPath
+}
+if (-not $SkipClone) {
+    $updateArguments.ManagedCloneRoot = $CloneRoot
+    $updateArguments.ManagedOrganization = $Organization
+    $updateArguments.ManagedRepositoryNames = @($organizationRepositories | ForEach-Object { $_.name })
+}
+& (Join-Path $scriptsDirectory "Update-GitRepositories.ps1") @updateArguments
 if ($LASTEXITCODE -ne 0) {
     $pullFailed = $true
     Write-Log "WARNING: one or more repositories failed to pull (see git-pull-all.log)."

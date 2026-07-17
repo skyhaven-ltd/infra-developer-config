@@ -54,6 +54,19 @@
     commits or require conflict resolution. Tag deletion and --no-tags apply
     either way.
 
+.PARAMETER ManagedCloneRoot
+    Root containing repositories managed from an external inventory. Repositories
+    directly beneath this root that are absent from -ManagedRepositoryNames are
+    reported as orphaned and skipped.
+
+.PARAMETER ManagedRepositoryNames
+    Names of active repositories beneath -ManagedCloneRoot.
+
+.PARAMETER ManagedOrganization
+    Expected GitHub organisation for managed repositories. Existing repositories
+    whose origin does not match this organisation and repository name are reported
+    as path conflicts and skipped.
+
 .EXAMPLE
     .\Update-GitRepositories.ps1
 
@@ -74,7 +87,10 @@ param (
     [switch]$InstallScheduledTask,
     [string]$TaskName = "Git Pull All Repositories",
     [string]$LogPath,
-    [switch]$AllowMerge
+    [switch]$AllowMerge,
+    [string]$ManagedCloneRoot,
+    [string[]]$ManagedRepositoryNames,
+    [string]$ManagedOrganization
 )
 
 Set-StrictMode -Version Latest
@@ -190,6 +206,41 @@ function Get-GitRepositories {
     }
 }
 
+function ConvertTo-GitHubRepositoryName {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$RemoteUrl
+    )
+
+    $normalized = $RemoteUrl.Trim().TrimEnd('/') -replace '\.git$', ''
+    if ($normalized -match '^(?:https?://github\.com/|git@github\.com:|ssh://git@github\.com/)(?<name>[^/]+/[^/]+)$') {
+        return $Matches.name.ToLowerInvariant()
+    }
+
+    return $null
+}
+
+function Write-RepositoryResult {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Level,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ResolvedLogPath
+    )
+
+    $colour = switch ($Level) {
+        "ERROR" { "Red" }
+        "WARNING" { "Yellow" }
+        default { "Gray" }
+    }
+    Write-Host "  $Level`: $Message" -ForegroundColor $colour
+    Add-Content -LiteralPath $ResolvedLogPath -Value "$Level`: $Message"
+}
+
 function Register-UserLogonTask {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param (
@@ -257,6 +308,14 @@ if ([string]::IsNullOrWhiteSpace($RepositoriesRoot)) {
 
 $repositoriesRootPath = Resolve-Directory -Path $RepositoriesRoot
 $scriptPath = (Resolve-Path -LiteralPath $PSCommandPath -ErrorAction Stop).Path
+
+$managedCloneRootPath = $null
+if (-not [string]::IsNullOrWhiteSpace($ManagedCloneRoot)) {
+    $managedCloneRootPath = Resolve-Directory -Path $ManagedCloneRoot
+    if ([string]::IsNullOrWhiteSpace($ManagedOrganization)) {
+        throw "-ManagedOrganization is required when -ManagedCloneRoot is specified."
+    }
+}
 
 if ([string]::IsNullOrWhiteSpace($LogPath)) {
     $logDirectory = Join-Path -Path $env:LOCALAPPDATA -ChildPath "ops-developer-config"
@@ -333,6 +392,12 @@ if ($repositories.Count -eq 0) {
 }
 
 $failed = New-Object System.Collections.Generic.List[string]
+$updated = New-Object System.Collections.Generic.List[string]
+$unchanged = New-Object System.Collections.Generic.List[string]
+$missingUpstream = New-Object System.Collections.Generic.List[string]
+$remoteUnavailable = New-Object System.Collections.Generic.List[string]
+$pathConflicts = New-Object System.Collections.Generic.List[string]
+$orphaned = New-Object System.Collections.Generic.List[string]
 $pullArguments = @("pull", "--no-tags")
 if (-not $AllowMerge) {
     $pullArguments += "--ff-only"
@@ -341,6 +406,31 @@ if (-not $AllowMerge) {
 foreach ($repository in $repositories) {
     Write-Host "Pulling $($repository.Path)"
     Add-Content -LiteralPath $LogPath -Value "[$(Get-Date -Format "yyyy-MM-dd HH:mm:ssK")] Pulling $($repository.Path)"
+
+    $isManagedRepository = $false
+    if ($managedCloneRootPath) {
+        $repositoryParent = Split-Path -Path $repository.Path -Parent
+        $isManagedRepository = $repositoryParent -eq $managedCloneRootPath
+    }
+
+    if ($isManagedRepository) {
+        $repositoryName = Split-Path -Path $repository.Path -Leaf
+        if ($ManagedRepositoryNames -notcontains $repositoryName) {
+            $orphaned.Add($repository.Path)
+            Write-RepositoryResult -Level "WARNING" -Message "ORPHANED: $repositoryName is not an active repository in $ManagedOrganization; skipped." -ResolvedLogPath $LogPath
+            continue
+        }
+
+        $originUrl = (& git -C $repository.Path remote get-url origin 2>$null | Select-Object -First 1)
+        $actualRepository = if ($originUrl) { ConvertTo-GitHubRepositoryName -RemoteUrl $originUrl } else { $null }
+        $expectedRepository = "$ManagedOrganization/$repositoryName".ToLowerInvariant()
+        if ($actualRepository -ne $expectedRepository) {
+            $pathConflicts.Add($repository.Path)
+            $actualDisplay = if ($originUrl) { $originUrl } else { "origin is not configured" }
+            Write-RepositoryResult -Level "WARNING" -Message "PATH CONFLICT: expected $expectedRepository at $($repository.Path), actual remote: $actualDisplay; skipped." -ResolvedLogPath $LogPath
+            continue
+        }
+    }
 
     $localTags = @(& git -C $repository.Path tag | Where-Object { $_ })
     if ($localTags.Count -gt 0) {
@@ -355,6 +445,37 @@ foreach ($repository in $repositories) {
     }
 
     & git -C $repository.Path config remote.origin.tagOpt --no-tags
+    if ($LASTEXITCODE -ne 0) {
+        $failed.Add($repository.Path)
+        Write-RepositoryResult -Level "ERROR" -Message "Unable to configure origin for $($repository.Path)." -ResolvedLogPath $LogPath
+        continue
+    }
+
+    $fetchOutput = @(& git -C $repository.Path fetch origin --prune --no-tags 2>&1)
+    $fetchExitCode = $LASTEXITCODE
+    if ($fetchOutput) {
+        Add-Content -LiteralPath $LogPath -Value ($fetchOutput | ForEach-Object { $_.ToString() })
+    }
+    if ($fetchExitCode -ne 0) {
+        $remoteUnavailable.Add($repository.Path)
+        $failed.Add($repository.Path)
+        Write-RepositoryResult -Level "ERROR" -Message "REMOTE UNAVAILABLE: fetch failed for $($repository.Path) with exit code $fetchExitCode." -ResolvedLogPath $LogPath
+        continue
+    }
+
+    $upstream = (& git -C $repository.Path rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>$null | Select-Object -First 1)
+    if ([string]::IsNullOrWhiteSpace($upstream)) {
+        $missingUpstream.Add($repository.Path)
+        Write-RepositoryResult -Level "WARNING" -Message "UPSTREAM MISSING: the current branch in $($repository.Path) has no upstream; skipped." -ResolvedLogPath $LogPath
+        continue
+    }
+
+    & git -C $repository.Path rev-parse --verify --quiet "$upstream^{commit}" *> $null
+    if ($LASTEXITCODE -ne 0) {
+        $missingUpstream.Add($repository.Path)
+        Write-RepositoryResult -Level "WARNING" -Message "UPSTREAM MISSING: $upstream no longer exists for $($repository.Path); skipped." -ResolvedLogPath $LogPath
+        continue
+    }
 
     $output = & git -C $repository.Path @pullArguments
     $exitCode = $LASTEXITCODE
@@ -367,10 +488,14 @@ foreach ($repository in $repositories) {
         $failed.Add($repository.Path)
         Add-Content -LiteralPath $LogPath -Value "ERROR: git pull failed with exit code $exitCode"
         Write-Host "  failed with exit code $exitCode" -ForegroundColor Red
+    } elseif ($output -match 'Already up[ -]to[ -]date') {
+        $unchanged.Add($repository.Path)
+    } else {
+        $updated.Add($repository.Path)
     }
 }
 
-$completedMessage = "Completed git pull run. Repositories: $($repositories.Count). Failed: $($failed.Count)."
+$completedMessage = "Completed git pull run. Repositories: $($repositories.Count). Updated: $($updated.Count). Unchanged: $($unchanged.Count). Missing upstream: $($missingUpstream.Count). Remote unavailable: $($remoteUnavailable.Count). Path conflicts: $($pathConflicts.Count). Orphaned: $($orphaned.Count). Failed: $($failed.Count)."
 Write-Host $completedMessage
 Add-Content -LiteralPath $LogPath -Value "[$(Get-Date -Format "yyyy-MM-dd HH:mm:ssK")] $completedMessage"
 
