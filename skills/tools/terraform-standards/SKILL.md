@@ -1,6 +1,7 @@
 ---
 name: terraform-standards
 description: Review, simplify, refactor, and validate Terraform using strict engineering standards that minimise code and tfvars while preserving infrastructure and state. Use for Terraform quality reviews, remediation plans, module and input redesign, readability improvements, drift-safe refactoring, or establishing reusable Terraform conventions.
+disable-model-invocation: true
 ---
 
 # Terraform engineering standards

@@ -1,6 +1,7 @@
 ---
 name: create-blog-post
 description: Create and validate CVEngine portfolio blog posts in docs/blog with deterministic helper support for front matter, slug generation, draft/published status, build script execution, and generated frontend post validation. Use when Liam asks to write, add, publish, draft, prepare, or validate blog posts for the Sky Haven CVEngine portfolio site.
+disable-model-invocation: true
 ---
 
 # Create Blog Post

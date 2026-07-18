@@ -10,6 +10,7 @@ description: |
   voice, negative parallelisms, and filler phrases.
 license: MIT
 compatibility: claude-code opencode
+disable-model-invocation: true
 allowed-tools:
   - Read
   - Write

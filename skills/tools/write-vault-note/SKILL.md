@@ -1,6 +1,7 @@
 ---
 name: write-vault-note
 description: Write or update a note in the Obsidian vault with the LLM Vault Workflow schema enforced by a deterministic validator. Use whenever creating or editing vault notes, promoting inbox items, or filing knowledge into the Second Brain, so agent-written notes match hand-written conventions.
+disable-model-invocation: true
 ---
 
 # Write vault note

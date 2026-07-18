@@ -1,6 +1,7 @@
 ---
 name: pythonize-skill
 description: Refactor existing Codex or Claude skills into Python-backed workflows that offload deterministic inspection, validation, parsing, file operations, API/CLI orchestration, and repeatable command sequences to bundled Python scripts while keeping the LLM responsible for judgement, explanations, grouping decisions, commit messages, summaries, reviews, and user-facing trade-offs. Use when asked to automate, script, speed up, reduce token use, or make a target skill more deterministic.
+disable-model-invocation: true
 ---
 
 # Pythonize Skill

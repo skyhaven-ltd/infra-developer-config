@@ -1,6 +1,7 @@
 ---
 name: show-and-tell
 description: Analyse a Git commit or commit range and prepare a stateful, non-technical sprint show-and-tell run sheet with outcomes, audience-friendly explanations, and a safe live demonstration. Use when asked to showcase, demo, present, or explain completed work to stakeholders who are not interested in source-code details.
+disable-model-invocation: true
 ---
 
 # Prepare a show and tell
