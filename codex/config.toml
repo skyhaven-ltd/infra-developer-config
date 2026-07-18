@@ -12,6 +12,13 @@ sandbox_mode = "danger-full-access"
 [windows]
 sandbox = "unelevated"
 
+# Knowledge MCP — durable cross-machine agent memory. The bearer token is read
+# from the KNOWLEDGE_MCP_TOKEN user environment variable, never from this file.
+[mcp_servers.knowledge]
+url = "https://knowledge.lab.skyhaven.ltd/mcp"
+bearer_token_env_var = "KNOWLEDGE_MCP_TOKEN"
+default_tools_approval_mode = "writes"
+
 [projects.'c:\local files\repositories\sky haven\.needs formatting\solution-cvengine-portfolio']
 trust_level = "trusted"
 

@@ -38,6 +38,17 @@
     per-session setup. Only needs to be passed once per machine; subsequent
     runs keep the stored value.
 
+.PARAMETER KnowledgeMcpToken
+    Bearer token for the knowledge MCP server. Persisted as the
+    KNOWLEDGE_MCP_TOKEN user environment variable; never written to any
+    configuration file. Only needs to be passed once per machine; subsequent
+    runs keep the stored value.
+
+.PARAMETER KnowledgeMcpUrl
+    MCP endpoint of the knowledge server. Registered for Claude Code in
+    ~/.claude.json (user scope, via a headers helper that reads the token from
+    the environment) and for Codex in ~/.codex/config.toml.
+
 .EXAMPLE
     .\Install-DeveloperConfig.ps1
     .\Install-DeveloperConfig.ps1 -Repo "C:\Local Files\Repositories\ops-developer-config"
@@ -50,7 +61,9 @@ param (
     [string]$Repo = (Resolve-Path "$PSScriptRoot\..").Path,
     [switch]$InstallScheduledTask,
     [string]$TaskName = "Install Developer Config",
-    [string]$ObsidianVaultPath
+    [string]$ObsidianVaultPath,
+    [string]$KnowledgeMcpToken,
+    [string]$KnowledgeMcpUrl = "https://knowledge.lab.skyhaven.ltd/mcp"
 )
 
 Set-StrictMode -Version Latest
@@ -423,7 +436,7 @@ function Merge-ClaudeSettings {
     }
 
     $merged = ConvertTo-OrderedJsonObject $destinationSettings
-    foreach ($propertyName in @("permissions", "enabledPlugins", "extraKnownMarketplaces")) {
+    foreach ($propertyName in @("permissions", "enabledPlugins", "extraKnownMarketplaces", "hooks")) {
         if ($sourceSettings.PSObject.Properties.Name -contains $propertyName) {
             $merged[$propertyName] = $sourceSettings.$propertyName
         }
@@ -581,11 +594,63 @@ function Remove-TomlScalarLine {
     return $output.ToArray()
 }
 
+function Get-TomlSectionLines {
+    param([string[]]$Lines, [string]$SectionName)
+
+    $output = [System.Collections.Generic.List[string]]::new()
+    $inSection = $false
+    foreach ($line in $Lines) {
+        $name = Get-TomlSectionName $line
+        if ($null -ne $name) {
+            $inSection = ($name -eq $SectionName)
+            if ($inSection) { $output.Add($line) }
+            continue
+        }
+        if ($inSection) { $output.Add($line) }
+    }
+
+    while (($output.Count -gt 0) -and ($output[$output.Count - 1] -match '^\s*$')) {
+        $output.RemoveAt($output.Count - 1)
+    }
+    return $output.ToArray()
+}
+
+function Remove-TomlSection {
+    param([string[]]$Lines, [string]$SectionName)
+
+    $output = [System.Collections.Generic.List[string]]::new()
+    $inSection = $false
+    foreach ($line in $Lines) {
+        $name = Get-TomlSectionName $line
+        if ($null -ne $name) {
+            $inSection = ($name -eq $SectionName)
+        }
+        if (-not $inSection) { $output.Add($line) }
+    }
+
+    while (($output.Count -gt 0) -and ($output[$output.Count - 1] -match '^\s*$')) {
+        $output.RemoveAt($output.Count - 1)
+    }
+    return $output.ToArray()
+}
+
 function Merge-CodexConfig {
     param([string]$Source, [string]$Destination)
 
     $shared = Read-SharedCodexConfig $Source
-    if ($shared.Count -eq 0) {
+    if (Test-Path -LiteralPath $Source -PathType Leaf) {
+        $sourceLines = @(Get-Content -LiteralPath $Source)
+    } else {
+        $sourceLines = @()
+    }
+    $managedSections = @{}
+    foreach ($sectionName in @("mcp_servers.knowledge")) {
+        $sectionLines = @(Get-TomlSectionLines -Lines $sourceLines -SectionName $sectionName)
+        if ($sectionLines.Count -gt 0) {
+            $managedSections[$sectionName] = $sectionLines
+        }
+    }
+    if (($shared.Count -eq 0) -and ($managedSections.Count -eq 0)) {
         Write-Host "  [skip] shared Codex config values not found: $Source" -ForegroundColor Yellow
         return
     }
@@ -608,6 +673,11 @@ function Merge-CodexConfig {
         if ($shared.ContainsKey($qualifiedKey)) {
             $lines = @(Set-TomlScalarLine -Lines $lines -QualifiedKey $qualifiedKey -ReplacementLine $shared[$qualifiedKey])
         }
+    }
+
+    foreach ($sectionName in $managedSections.Keys) {
+        $lines = @(Remove-TomlSection -Lines $lines -SectionName $sectionName)
+        $lines = @($lines) + @("") + @($managedSections[$sectionName])
     }
 
     Set-Content -LiteralPath $Destination -Value $lines -Encoding UTF8
@@ -650,6 +720,69 @@ function Set-ObsidianVaultPath {
         Write-Host "  [warn] $variableName points at $current but no .obsidian directory was found there." -ForegroundColor Yellow
         Write-Host "         Fix it with: .\Install-DeveloperConfig.ps1 -ObsidianVaultPath `"<vault root>`"" -ForegroundColor Yellow
     }
+}
+
+function Install-KnowledgeMcp {
+    param([string]$RepoPath, [string]$Url, [string]$Token)
+
+    # Headers helper: emits the Authorization header from the environment so
+    # the bearer token is never persisted in ~/.claude.json.
+    $helperSource = Join-Path $RepoPath "tools\knowledge-mcp\knowledge-mcp-headers.cmd"
+    if (-not (Test-Path -LiteralPath $helperSource -PathType Leaf)) {
+        throw "knowledge MCP headers helper not found: $helperSource"
+    }
+    $binDirectory = Join-Path $env:USERPROFILE ".local\bin"
+    New-Item -ItemType Directory -Path $binDirectory -Force | Out-Null
+    $helperDestination = Join-Path $binDirectory "knowledge-mcp-headers.cmd"
+    Copy-Item -LiteralPath $helperSource -Destination $helperDestination -Force
+    Write-Host "  [copy]    $helperDestination <- $helperSource" -ForegroundColor Green
+
+    $variableName = "KNOWLEDGE_MCP_TOKEN"
+    if ($Token) {
+        [Environment]::SetEnvironmentVariable($variableName, $Token, "User")
+        Set-Item -Path "Env:$variableName" -Value $Token
+        Write-Host "  [env]  $variableName set for this user" -ForegroundColor Green
+    } elseif (-not [Environment]::GetEnvironmentVariable($variableName, "User")) {
+        Write-Host "  [warn] $variableName is not set. Agents cannot authenticate to the knowledge MCP." -ForegroundColor Yellow
+        Write-Host "         Set it once with: .\Install-DeveloperConfig.ps1 -KnowledgeMcpToken `"<token>`"" -ForegroundColor Yellow
+    }
+
+    # Register the server at user scope in ~/.claude.json while preserving all
+    # other configuration in that file. The file can contain keys that differ
+    # only by casing, so it must be parsed with -AsHashtable (PowerShell 7+).
+    if ($PSVersionTable.PSVersion.Major -lt 6) {
+        Write-Host "  [warn] Claude MCP registration requires PowerShell 7; run this script once in pwsh." -ForegroundColor Yellow
+        return
+    }
+    $claudeConfigPath = Join-Path $env:USERPROFILE ".claude.json"
+    if (Test-Path -LiteralPath $claudeConfigPath -PathType Leaf) {
+        $claudeConfig = Get-Content -LiteralPath $claudeConfigPath -Raw | ConvertFrom-Json -AsHashtable
+    } else {
+        $claudeConfig = @{}
+    }
+    if (-not $claudeConfig.ContainsKey("mcpServers")) {
+        $claudeConfig["mcpServers"] = @{}
+    }
+
+    $server = [ordered]@{
+        type          = "http"
+        url           = $Url
+        headersHelper = $helperDestination
+    }
+    $desiredJson = $server | ConvertTo-Json -Compress
+    if ($claudeConfig["mcpServers"].ContainsKey("knowledge")) {
+        $existingJson = $claudeConfig["mcpServers"]["knowledge"] | ConvertTo-Json -Compress
+        if ($existingJson -eq $desiredJson) {
+            Write-Host "  [skip] knowledge MCP already registered in $claudeConfigPath" -ForegroundColor DarkGray
+            return
+        }
+    }
+    $claudeConfig["mcpServers"]["knowledge"] = $server
+    if (Test-Path -LiteralPath $claudeConfigPath -PathType Leaf) {
+        Copy-Item -LiteralPath $claudeConfigPath -Destination "$claudeConfigPath.backup" -Force
+    }
+    $claudeConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $claudeConfigPath -Encoding UTF8
+    Write-Host "  [merge]  $claudeConfigPath <= knowledge MCP server (user scope)" -ForegroundColor Green
 }
 
 function ConvertTo-TaskArgument {
@@ -799,6 +932,7 @@ Copy-ClaudeInstructions $systemInstructions @(
     "$env:USERPROFILE\.claude-personal"
 )
 Merge-ClaudeSettings "$Repo\claude\settings.json" "$claude\settings.json"
+New-Symlink "$claude\hooks\knowledge-capture-stop.ps1" "$Repo\claude\hooks\knowledge-capture-stop.ps1"
 
 # -- Codex -----------------------------------------------------------------
 
@@ -807,6 +941,11 @@ Remove-ManagedFileLink "$codex\instructions.md" "$Repo\codex\instructions.md" | 
 Remove-ManagedFileLink "$codex\AGENTS.md" "$Repo\codex\AGENTS.md" | Out-Null
 New-Symlink "$codex\AGENTS.md" $systemInstructions
 Merge-CodexConfig "$Repo\codex\config.toml" "$codex\config.toml"
+
+# -- Knowledge MCP -----------------------------------------------------------
+
+Write-Host "`nKnowledge MCP" -ForegroundColor Cyan
+Install-KnowledgeMcp $Repo $KnowledgeMcpUrl $KnowledgeMcpToken
 
 # -- Obsidian ----------------------------------------------------------------
 
