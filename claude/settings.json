@@ -20,9 +20,25 @@
       "TaskOutput",
       "TaskStop",
       "mcp__ide__executeCode",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "mcp__knowledge__memory_recall",
+      "mcp__knowledge__memory_get",
+      "mcp__knowledge__memory_upsert",
+      "mcp__knowledge__memory_mark"
     ],
     "deny": []
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"%USERPROFILE%\\.claude\\hooks\\knowledge-capture-stop.ps1\""
+          }
+        ]
+      }
+    ]
   },
   "enabledPlugins": {
     "caveman@caveman": true,
