@@ -442,6 +442,14 @@ function Merge-ClaudeSettings {
         }
     }
 
+    # Hook commands are not run through cmd, so %USERPROFILE% is never
+    # expanded; substitute the machine's absolute profile path at merge time.
+    if ($merged.Contains("hooks")) {
+        $hooksJson = $merged["hooks"] | ConvertTo-Json -Depth 20
+        $escapedProfile = $env:USERPROFILE.Replace("\", "\\")
+        $merged["hooks"] = $hooksJson.Replace("%USERPROFILE%", $escapedProfile) | ConvertFrom-Json
+    }
+
     $merged | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $Destination -Encoding UTF8
     Write-Host "  [merge]  $Destination <= shared permissions/plugins" -ForegroundColor Green
 }
