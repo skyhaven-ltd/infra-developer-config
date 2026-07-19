@@ -1,6 +1,6 @@
 ---
 name: pythonize-skill
-description: Refactor existing Codex or Claude skills into Python-backed workflows that offload deterministic inspection, validation, parsing, file operations, API/CLI orchestration, and repeatable command sequences to bundled Python scripts while keeping the LLM responsible for judgement, explanations, grouping decisions, commit messages, summaries, reviews, and user-facing trade-offs. Use when asked to automate, script, speed up, reduce token use, or make a target skill more deterministic.
+description: Refactor an existing skill so deterministic work (inspection, validation, parsing, file operations, CLI orchestration) moves into bundled Python helper scripts and SKILL.md keeps only the judgement calls. Use when asked to pythonize a skill, add a helper script to a skill, or make a skill faster, cheaper, or more deterministic.
 disable-model-invocation: true
 ---
 
@@ -45,7 +45,6 @@ Refactor a target skill so `SKILL.md` becomes a thin orchestration guide and bun
 
    ```powershell
    python -m py_compile "<target-skill-dir>\scripts\<helper>.py"
-   python "<skill-creator-dir>\scripts\quick_validate.py" "<target-skill-dir>"
    ```
 
    Also run representative helper tests against a temporary or safe fixture. Do not test destructive operations against live resources.
@@ -70,20 +69,21 @@ Keep target skills short. A good Python-backed skill usually contains:
 Use the bundled Python helper for deterministic checks and execution. Use the LLM only for judgement: <specific judgement tasks>.
 
 1. Run inspect:
+
    ```powershell
    python "<skill-dir>\scripts\<helper>.py" inspect --target "<target>" --json
    ```
-````
 
 2. Stop or ask if `<risk field>` is present.
 3. Create `<plan>.json` outside the target repo/folder.
 4. Run apply:
+
    ```powershell
    python "<skill-dir>\scripts\<helper>.py" apply --target "<target>" --plan "<plan>.json"
    ```
-5. Report concise results.
 
-```
+5. Report concise results.
+````
 
 ## When not to pythonize heavily
 

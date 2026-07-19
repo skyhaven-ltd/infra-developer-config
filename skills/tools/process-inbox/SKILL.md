@@ -21,8 +21,10 @@ vault; read it first.
      `02 - Notes/` from `99 - Meta/Templates/Note Template.md`.
    - **flag**: the content has no durable value. Do NOT delete; list it for
      the user to approve deletion.
-3. Write and validate every merged or promoted note with the write-vault-note
-   skill so the schema is enforced deterministically. In addition:
+3. Write and validate every merged or promoted note by reading and following
+   `write-vault-note`'s SKILL.md workflow (it is not model-invocable via the
+   Skill tool; read the file directly from the installed skills directory) so
+   the schema is enforced deterministically. In addition:
    - Preserve the original `created` date and any source metadata from the
      inbox note.
    - Link the note to exactly one MOC in its `## Related` section and add it

@@ -29,7 +29,9 @@ sanctioned path from agent memory to the vault.
      machine quirks and trivia usually do not);
    - not already represented in the vault (search `02 - Notes/` and the
      relevant MOC first; prefer updating an existing note over creating one).
-3. **Write.** For each selected memory, invoke the `write-vault-note` skill
+3. **Write.** For each selected memory, read and follow
+   `write-vault-note`'s SKILL.md workflow (it is not model-invocable via the
+   Skill tool; read the file directly from the installed skills directory)
    to create or update the note in `02 - Notes/`, citing the memory's
    evidence in `sources` and linking related notes. Update the relevant MOC.
 4. **Groom the store.** While sweeping, when a memory is contradicted by

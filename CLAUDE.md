@@ -28,13 +28,13 @@ credentials, etc.) is excluded.
 
 ## Skills
 
-Each skill lives in `skills/<name>/SKILL.md` and is a markdown file with YAML frontmatter. The frontmatter fields are:
+Each skill lives in `skills/<category>/<name>/SKILL.md` (categories: `engineering/`, `git/`, `tools/`) and is a markdown file with YAML frontmatter. The frontmatter fields are:
 
 ```yaml
 ---
 name: skill-name
-description: shown in the skill picker
-disable-model-invocation: true # optional â€” runs without a model call (pure bash)
+description: shown in the skill picker and used for model auto-invocation matching
+disable-model-invocation: true # optional - hides the skill from model auto-invocation; user slash-command only
 ---
 ```
 
@@ -42,62 +42,35 @@ The body is the instruction prompt used by Claude or Codex when the skill is inv
 
 ### Available Skills
 
-Naming schema: `{verb}-{subject}[-{qualifier}]`
+**engineering/**
 
-**Review**
+| Skill                     | Purpose                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `test-driven-development` | Test-first workflow: red-green-refactor via vertical slices, integration-style tests |
 
-| Skill                  | Purpose                                                   |
-| ---------------------- | --------------------------------------------------------- |
-| `review-terraform`     | Terraform code and CI/CD pipeline (minimalist lens)       |
-| `review-gha-pipelines` | GitHub Actions workflow quality, security, reliability    |
-| `review-ado-pipelines` | Azure DevOps YAML pipeline quality, security, reliability |
-| `review-pull-request`  | Pull request review (GitHub and ADO)                      |
-| `review-security`      | App security review (OWASP, Azure) and CI security gates  |
-| `review-waf`           | Azure Well-Architected Framework pillar assessment (RAG)  |
-| `review-caf`           | Cloud Adoption Framework landing zone alignment           |
+**git/**
 
-**Format**
+| Skill             | Purpose                                            |
+| ----------------- | -------------------------------------------------- |
+| `create-pr`       | Create a pull request (GitHub or Azure DevOps)     |
+| `git-commit-push` | Stage, commit, and push with safety checks         |
+| `raise-issue`     | Raise a classified GitHub issue (bug/feature/task) |
 
-| Skill                  | Purpose                                                                      |
-| ---------------------- | ---------------------------------------------------------------------------- |
-| `format-terraform`     | Terraform file structure, naming, tagging, pinning, and formatting standards |
-| `format-ado-pipelines` | Azure DevOps pipeline file structure, layout, and formatting standards       |
-| `format-gha-pipelines` | GitHub Actions workflow file structure, layout, and formatting standards     |
+**tools/**
 
-**Generate**
-
-| Skill                    | Purpose                                               |
-| ------------------------ | ----------------------------------------------------- |
-| `generate-diagram`       | Mermaid architecture diagrams from IaC/code           |
-| `generate-cost-estimate` | Azure cost estimate from IaC                          |
-| `generate-readme`        | Brief project README from code and standards template |
-
-**Create**
-
-| Skill         | Purpose                                            |
-| ------------- | -------------------------------------------------- |
-| `create-pr`   | Create a pull request (GitHub or Azure DevOps)     |
-| `raise-issue` | Raise a classified GitHub issue (bug/feature/task) |
-
-> Repository creation and configuration are handled by Terraform; the former `config-repo-gh` / `config-repo-ado` skills have been decommissioned.
-
-**Git**
-
-| Skill             | Purpose                                    |
-| ----------------- | ------------------------------------------ |
-| `git-commit-push` | Stage, commit, and push with safety checks |
-
-**Microsoft Foundry**
-
-| Skill               | Purpose                                                                                                                             |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `microsoft-foundry` | Full Foundry agent lifecycle: deploy, invoke, observe, evaluate, optimize prompts, manage models/quota/RBAC, and provision projects |
-
-**Other**
-
-| Skill   | Purpose                                                |
-| ------- | ------------------------------------------------------ |
-| `learn` | Quiz on recent code changes to reinforce understanding |
+| Skill                 | Purpose                                                                    |
+| --------------------- | -------------------------------------------------------------------------- |
+| `create-blog-post`    | CVEngine portfolio blog posts with helper-validated front matter and build |
+| `distill-knowledge`   | Promote knowledge MCP memories into Obsidian vault notes; groom the store  |
+| `generate-readme`     | Brief project README from repo code                                        |
+| `handoff`             | Compact the conversation into a handoff doc for the next session           |
+| `humanizer`           | Remove AI-writing patterns from text                                       |
+| `process-inbox`       | File Obsidian inbox captures into permanent notes                          |
+| `pythonize-skill`     | Move a skill's deterministic work into bundled Python helpers              |
+| `show-and-tell`       | Stakeholder-facing demo run sheet from a commit or commit range            |
+| `teach`               | Multi-session teaching workspace with lessons and learning records         |
+| `terraform-standards` | House Terraform engineering standards for review, refactor, and validation |
+| `write-vault-note`    | Write or update Obsidian vault notes with schema validation                |
 
 ## Common Tasks
 
@@ -118,7 +91,7 @@ Requires `gh auth login` (and `gh auth setup-git` for HTTPS clone credentials). 
 
 ### Adding a new skill
 
-Create `skills/<name>/SKILL.md` with the frontmatter and prompt body, then commit and push.
+Create `skills/<category>/<name>/SKILL.md` with the frontmatter and prompt body, then commit and push.
 
 Existing skill edits are immediately available on linked machines after a `git pull` when junctions or symlinks are available. When the installer falls back to copies, re-run `.\scripts\Install-DeveloperConfig.ps1` after pulling to refresh them. When adding a new skill folder, re-run the installer so both Claude and Codex get per-skill entries under `~/.claude/skills/<name>` and `~/.codex/skills/<name>`.
 
