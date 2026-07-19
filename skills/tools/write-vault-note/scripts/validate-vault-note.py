@@ -7,10 +7,12 @@ allowed), exit 1 means the note must be fixed, exit 2 means the environment
 or arguments are wrong.
 
 Usage:
-    python validate-vault-note.py <note-file> [--inbox]
+    python validate-vault-note.py <note-file>
 
---inbox validates against the inbox-template frontmatter (no learning fields)
-instead of the maintained-note frontmatter.
+Schema (simplified, 2026-07-19): every note carries exactly the frontmatter
+keys title, created, modified, type, tags, source. The `type` field replaces
+the old type tags; tags are emergent (reused from the vault) rather than drawn
+from a controlled vocabulary.
 """
 
 from __future__ import annotations
@@ -22,14 +24,11 @@ import sys
 from pathlib import Path
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-TAG_BULLET_PATTERN = re.compile(r"^- `([a-z0-9-]+)`\s*:")
+TAG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 MOJIBAKE_PATTERN = re.compile(r"â€|Ã.|â€™|â€œ")
-LEARNING_TYPES = {"multiple-choice", "short-answer", "rubric", "categorisation"}
-MAINTAINED_KEYS = [
-    "title", "created", "modified", "sources", "tags", "aliases",
-    "learning_status", "learning_question_goal", "learning_question_types",
-]
-INBOX_KEYS = ["title", "created", "modified", "sources", "tags", "aliases"]
+REQUIRED_KEYS = ["title", "created", "modified", "type", "tags", "source"]
+NOTE_TYPES = {"note", "inbox", "moc", "daily"}
+MANAGED_FOLDERS = ["00 - Inbox", "01 - MOCs", "02 - Notes", "03 - Journaling"]
 
 
 def fail(message: str) -> None:
@@ -37,32 +36,20 @@ def fail(message: str) -> None:
     sys.exit(2)
 
 
-def load_tag_vocabulary(vault_root: Path) -> tuple[set[str], set[str], set[str]]:
-    """Return (all_tags, type_tags, state_tags) from tag-vocabulary.md."""
-    vocabulary_path = vault_root / "99 - Meta" / "AI Formatting" / "tag-vocabulary.md"
-    if not vocabulary_path.is_file():
-        fail(f"tag vocabulary not found: {vocabulary_path}")
-
-    all_tags: set[str] = set()
-    type_tags: set[str] = set()
-    state_tags: set[str] = set()
-    section = ""
-    for line in vocabulary_path.read_text(encoding="utf-8").splitlines():
-        if line.startswith("## "):
-            section = line[3:].strip()
+def load_vault_tags(vault_root: Path) -> set[str]:
+    """Collect every tag already used in the managed folders."""
+    tags: set[str] = set()
+    for folder in MANAGED_FOLDERS:
+        folder_path = vault_root / folder
+        if not folder_path.is_dir():
             continue
-        match = TAG_BULLET_PATTERN.match(line.strip())
-        if not match:
-            continue
-        tag = match.group(1)
-        all_tags.add(tag)
-        if section == "Type Tags":
-            type_tags.add(tag)
-        elif section == "State Tags":
-            state_tags.add(tag)
-    if not all_tags or not type_tags:
-        fail(f"could not parse tags from {vocabulary_path}")
-    return all_tags, type_tags, state_tags
+        for note in folder_path.glob("*.md"):
+            lines = note.read_text(encoding="utf-8-sig").splitlines()
+            frontmatter, _, _ = parse_frontmatter(lines)
+            values = frontmatter.get("tags")
+            if isinstance(values, list):
+                tags.update(tag for tag in values if isinstance(tag, str))
+    return tags
 
 
 def parse_frontmatter(lines: list[str]) -> tuple[dict[str, object], int, list[str]]:
@@ -84,6 +71,8 @@ def parse_frontmatter(lines: list[str]) -> tuple[dict[str, object], int, list[st
         index += 1
         if line.strip() == "---":
             return frontmatter, index, errors
+        if line.strip().startswith("#"):
+            continue
 
         if re.match(r"^\s+-\s", line) or line.startswith("- "):
             if current_list_key is None:
@@ -122,11 +111,6 @@ def parse_frontmatter(lines: list[str]) -> tuple[dict[str, object], int, list[st
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("note", help="path to the markdown note to validate")
-    parser.add_argument(
-        "--inbox",
-        action="store_true",
-        help="validate as an inbox note (no learning fields required)",
-    )
     arguments = parser.parse_args()
 
     vault_value = os.environ.get("OBSIDIAN_VAULT_PATH")
@@ -140,7 +124,6 @@ def main() -> int:
     if not note_path.is_file():
         fail(f"note not found: {note_path}")
 
-    all_tags, type_tags, state_tags = load_tag_vocabulary(vault_root)
     content = note_path.read_text(encoding="utf-8")
     lines = content.splitlines()
     errors: list[str] = []
@@ -149,68 +132,49 @@ def main() -> int:
     frontmatter, body_start, frontmatter_errors = parse_frontmatter(lines)
     errors.extend(frontmatter_errors)
 
-    required = INBOX_KEYS if arguments.inbox else MAINTAINED_KEYS
-    for key in required:
+    for key in REQUIRED_KEYS:
         if key not in frontmatter:
             errors.append(f"missing frontmatter key: {key}")
-    if arguments.inbox:
-        for key in ("learning_status", "learning_question_goal", "learning_question_types"):
-            if key in frontmatter:
-                errors.append(f"inbox notes must not carry learning field: {key}")
+    for key in frontmatter:
+        if key not in REQUIRED_KEYS:
+            errors.append(f"unknown frontmatter key: {key} (schema allows only {', '.join(REQUIRED_KEYS)})")
+
+    note_type = frontmatter.get("type")
+    if "type" in frontmatter and note_type not in NOTE_TYPES:
+        errors.append(f"type must be one of {', '.join(sorted(NOTE_TYPES))}, got: {note_type}")
 
     for key in ("created", "modified"):
         value = frontmatter.get(key)
         if isinstance(value, str) and not DATE_PATTERN.match(value):
             errors.append(f"{key} must be YYYY-MM-DD, got: {value}")
 
-    sources = frontmatter.get("sources")
-    if "sources" in frontmatter and (not isinstance(sources, list) or not sources):
-        errors.append("sources must be a non-empty list (use `- null` when there is no source)")
-
     tags = frontmatter.get("tags")
-    if isinstance(tags, list) and tags:
+    if "tags" in frontmatter and not isinstance(tags, list):
+        errors.append("tags must be a list (use `tags: []` when empty)")
+    elif isinstance(tags, list):
         tag_values = [tag for tag in tags if tag is not None]
-        unknown = [tag for tag in tag_values if tag not in all_tags]
-        if unknown:
-            errors.append(
-                f"tags not in tag-vocabulary.md: {', '.join(unknown)} "
-                "(propose under `## Pending Approval` instead of inventing)"
-            )
-        note_type_tags = [tag for tag in tag_values if tag in type_tags]
-        if len(note_type_tags) != 1:
-            errors.append(
-                f"exactly one type tag required, found {len(note_type_tags)}: "
-                f"{', '.join(note_type_tags) or '(none)'}"
-            )
-        topic = [t for t in tag_values if t not in type_tags and t not in state_tags]
-        if not topic:
-            errors.append("at least one topic tag is required")
-        if len(tag_values) > 4 and "pinned" not in tag_values:
-            warnings.append(f"{len(tag_values)} tags; more than 4 usually means the note should be split")
-        if arguments.inbox and "inbox" not in tag_values:
-            errors.append("inbox notes must carry the `inbox` tag")
-        if not arguments.inbox and "inbox" in tag_values:
-            errors.append("maintained notes must not carry the `inbox` tag")
-    elif "tags" in frontmatter:
-        errors.append("tags must be a non-empty list")
-
-    if not arguments.inbox:
-        status = frontmatter.get("learning_status")
-        if isinstance(status, str) and status != "needs-questions":
+        for tag in tag_values:
+            if not TAG_PATTERN.match(str(tag)):
+                errors.append(f"tag must be lowercase-hyphenated: {tag}")
+        if "pinned" in tag_values and note_type != "inbox":
+            errors.append("`pinned` is only valid on inbox notes")
+        topic_tags = [tag for tag in tag_values if tag != "pinned"]
+        if note_type == "note" and not topic_tags:
+            warnings.append("no topic tags; permanent notes should carry 1-3")
+        if len(topic_tags) > 3:
+            warnings.append(f"{len(topic_tags)} topic tags; more than 3 usually means the note should be split")
+        vault_tags = load_vault_tags(vault_root)
+        new_tags = [tag for tag in topic_tags if tag not in vault_tags]
+        if new_tags:
             warnings.append(
-                f"learning_status is `{status}`; use `needs-questions` unless Liam asked otherwise"
+                f"tags not yet used in the vault: {', '.join(new_tags)} "
+                "(reuse an existing tag unless nothing fits)"
             )
-        goal = frontmatter.get("learning_question_goal")
-        if isinstance(goal, str):
-            if not goal.isdigit() or not (1 <= int(goal) <= 20):
-                errors.append(f"learning_question_goal must be an integer 1-20, got: {goal}")
-        question_types = frontmatter.get("learning_question_types")
-        if isinstance(question_types, list):
-            invalid = [q for q in question_types if q not in LEARNING_TYPES]
-            if invalid:
-                errors.append(f"invalid learning_question_types: {', '.join(map(str, invalid))}")
-            if not question_types:
-                errors.append("learning_question_types must not be empty")
+
+    if "source" in frontmatter:
+        source = frontmatter.get("source")
+        if isinstance(source, list) and not source:
+            errors.append("source must be null, a value, or a non-empty list")
 
     body = lines[body_start:]
     h1_lines = [line for line in body if re.match(r"^# \S", line)]
