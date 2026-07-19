@@ -29,7 +29,7 @@ vault; read it first.
      to that MOC's `## Notes` list (update the MOC's `modified` date).
 4. Delete the inbox file only after its content is fully integrated
    (merge or promote). Flagged files stay put.
-5. Append one line per item to `99 - Meta/processing-log.md`:
+5. Append one line per item to `99 - Meta/AI Formatting/processing-log.md`:
    `YYYY-MM-DD | <inbox note> | merge/promote/flag | <destination or reason>`.
 6. Finish with a short summary: what was merged, promoted, flagged, skipped.
 
