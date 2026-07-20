@@ -15,9 +15,7 @@ Tracked in version control (enforced by `.gitignore`):
 | `skills/`                             | Claude Code + Codex | Shared skill source; linked into `~/.claude/skills` and `~/.codex/skills/<name>`               |
 | `claude/settings.json`                | Claude Code         | Global tool permissions and model config                                                       |
 | `system/SYSTEM.md`                    | Claude Code + Codex | Canonical global instructions installed under each tool's required filename                    |
-| `git/hooks/`                          | Git                 | Global git hooks (pre-commit, etc.)                                                            |
 | `codex/config.toml`                   | Codex CLI           | Model, reasoning effort, options                                                               |
-| `git/config.shared`                   | Git                 | Shared aliases and core settings (via `[include]`)                                             |
 | `scripts/Install-DeveloperConfig.ps1` | All                 | One-shot link creation for a new Windows machine; can install a per-user logon task for itself |
 | `scripts/Update-GitRepositories.ps1`  | Git                 | Pulls all repositories under a configurable root; can install a per-user logon task for itself |
 | `scripts/Sync-DeveloperMachine.ps1`   | All                 | Single entry point: ensures its own per-user logon task, clones missing org repos, pulls all, then runs the installer |
@@ -167,15 +165,6 @@ The `gh` CLI is not on the bash `PATH` by default. Use the full path:
 Defines globally allowed tools. When adding new MCP tool permissions, add them to the `allow` array. The `deny` array is currently empty â€” prefer allowlist-only control.
 
 Plugins (marketplace and official) are configured under `enabledPlugins` â€” these are not synced via git and must be installed per-device.
-
-## git/hooks/
-
-Global git hooks wired via `git config --global core.hooksPath`. Applied to every repo on the machine. The `pre-commit` hook auto-formats staged files before each commit:
-
-- **`.tf` / `.tfvars`** â€” runs `terraform fmt -recursive`
-- **`.yaml` / `.yml` / `.json`** â€” runs `prettier --write`, using `.github/linters/.prettierrc.json` if present
-
-Both formatters re-stage the files they modify. Formatting errors are non-fatal (the commit proceeds).
 
 ## Code Style
 

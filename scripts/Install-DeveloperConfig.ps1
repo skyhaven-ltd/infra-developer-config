@@ -498,7 +498,7 @@ function Read-SharedCodexConfig {
     }
 
     $section = ""
-    foreach ($line in Get-Content -LiteralPath $Source) {
+    foreach ($line in Get-Content -LiteralPath $Source -Encoding UTF8) {
         $sectionName = Get-TomlSectionName $line
         if ($null -ne $sectionName) {
             $section = $sectionName
@@ -647,7 +647,7 @@ function Merge-CodexConfig {
 
     $shared = Read-SharedCodexConfig $Source
     if (Test-Path -LiteralPath $Source -PathType Leaf) {
-        $sourceLines = @(Get-Content -LiteralPath $Source)
+        $sourceLines = @(Get-Content -LiteralPath $Source -Encoding UTF8)
     } else {
         $sourceLines = @()
     }
@@ -667,7 +667,7 @@ function Merge-CodexConfig {
     New-Item -ItemType Directory -Path (Split-Path $Destination) -Force | Out-Null
 
     if (Test-Path -LiteralPath $Destination -PathType Leaf) {
-        $lines = @(Get-Content -LiteralPath $Destination)
+        $lines = @(Get-Content -LiteralPath $Destination -Encoding UTF8)
     } else {
         $lines = @(
             "# Codex CLI local configuration",
@@ -730,8 +730,47 @@ function Set-ObsidianVaultPath {
     }
 }
 
+function Register-KnowledgeMcpServer {
+    param([string]$ClaudeConfigPath, [string]$Url, [string]$HelperDestination)
+
+    # Register the server at user scope in the given .claude.json while
+    # preserving all other configuration in that file. The file can contain
+    # keys that differ only by casing, so it must be parsed with
+    # -AsHashtable (PowerShell 7+).
+    if (Test-Path -LiteralPath $ClaudeConfigPath -PathType Leaf) {
+        $claudeConfig = Get-Content -LiteralPath $ClaudeConfigPath -Raw | ConvertFrom-Json -AsHashtable
+    } else {
+        $claudeConfig = @{}
+    }
+    if (-not $claudeConfig.ContainsKey("mcpServers")) {
+        $claudeConfig["mcpServers"] = @{}
+    }
+
+    $server = [ordered]@{
+        type          = "http"
+        url           = $Url
+        headersHelper = $HelperDestination
+    }
+    $desiredJson = $server | ConvertTo-Json -Compress
+    if ($claudeConfig["mcpServers"].ContainsKey("knowledge")) {
+        $existingJson = $claudeConfig["mcpServers"]["knowledge"] | ConvertTo-Json -Compress
+        if ($existingJson -eq $desiredJson) {
+            Write-Host "  [skip] knowledge MCP already registered in $ClaudeConfigPath" -ForegroundColor DarkGray
+            return
+        }
+    }
+    $claudeConfig["mcpServers"]["knowledge"] = $server
+    if (Test-Path -LiteralPath $ClaudeConfigPath -PathType Leaf) {
+        Copy-Item -LiteralPath $ClaudeConfigPath -Destination "$ClaudeConfigPath.backup" -Force
+    } else {
+        New-Item -ItemType Directory -Path (Split-Path $ClaudeConfigPath) -Force | Out-Null
+    }
+    $claudeConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $ClaudeConfigPath -Encoding UTF8
+    Write-Host "  [merge]  $ClaudeConfigPath <= knowledge MCP server (user scope)" -ForegroundColor Green
+}
+
 function Install-KnowledgeMcp {
-    param([string]$RepoPath, [string]$Url, [string]$Token)
+    param([string]$RepoPath, [string]$Url, [string]$Token, [string[]]$ClaudeConfigPaths)
 
     # Headers helper: emits the Authorization header from the environment so
     # the bearer token is never persisted in ~/.claude.json.
@@ -755,42 +794,13 @@ function Install-KnowledgeMcp {
         Write-Host "         Set it once with: .\Install-DeveloperConfig.ps1 -KnowledgeMcpToken `"<token>`"" -ForegroundColor Yellow
     }
 
-    # Register the server at user scope in ~/.claude.json while preserving all
-    # other configuration in that file. The file can contain keys that differ
-    # only by casing, so it must be parsed with -AsHashtable (PowerShell 7+).
     if ($PSVersionTable.PSVersion.Major -lt 6) {
         Write-Host "  [warn] Claude MCP registration requires PowerShell 7; run this script once in pwsh." -ForegroundColor Yellow
         return
     }
-    $claudeConfigPath = Join-Path $env:USERPROFILE ".claude.json"
-    if (Test-Path -LiteralPath $claudeConfigPath -PathType Leaf) {
-        $claudeConfig = Get-Content -LiteralPath $claudeConfigPath -Raw | ConvertFrom-Json -AsHashtable
-    } else {
-        $claudeConfig = @{}
+    foreach ($claudeConfigPath in $ClaudeConfigPaths) {
+        Register-KnowledgeMcpServer -ClaudeConfigPath $claudeConfigPath -Url $Url -HelperDestination $helperDestination
     }
-    if (-not $claudeConfig.ContainsKey("mcpServers")) {
-        $claudeConfig["mcpServers"] = @{}
-    }
-
-    $server = [ordered]@{
-        type          = "http"
-        url           = $Url
-        headersHelper = $helperDestination
-    }
-    $desiredJson = $server | ConvertTo-Json -Compress
-    if ($claudeConfig["mcpServers"].ContainsKey("knowledge")) {
-        $existingJson = $claudeConfig["mcpServers"]["knowledge"] | ConvertTo-Json -Compress
-        if ($existingJson -eq $desiredJson) {
-            Write-Host "  [skip] knowledge MCP already registered in $claudeConfigPath" -ForegroundColor DarkGray
-            return
-        }
-    }
-    $claudeConfig["mcpServers"]["knowledge"] = $server
-    if (Test-Path -LiteralPath $claudeConfigPath -PathType Leaf) {
-        Copy-Item -LiteralPath $claudeConfigPath -Destination "$claudeConfigPath.backup" -Force
-    }
-    $claudeConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $claudeConfigPath -Encoding UTF8
-    Write-Host "  [merge]  $claudeConfigPath <= knowledge MCP server (user scope)" -ForegroundColor Green
 }
 
 function ConvertTo-TaskArgument {
@@ -935,11 +945,15 @@ New-Junction "$claude\docs" "$Repo\docs"
 $systemInstructions = "$Repo\system\SYSTEM.md"
 Remove-ManagedFileLink "$claude\CLAUDE.md" "$Repo\claude\CLAUDE.md" | Out-Null
 New-Symlink "$claude\CLAUDE.md" $systemInstructions
-Copy-ClaudeInstructions $systemInstructions @(
+$extraClaudeProfileDirectories = @(
     "$env:USERPROFILE\.claude-work"
     "$env:USERPROFILE\.claude-personal"
 )
+Copy-ClaudeInstructions $systemInstructions $extraClaudeProfileDirectories
 Merge-ClaudeSettings "$Repo\claude\settings.json" "$claude\settings.json"
+foreach ($profileDirectory in $extraClaudeProfileDirectories) {
+    Merge-ClaudeSettings "$Repo\claude\settings.json" "$profileDirectory\settings.json"
+}
 New-Symlink "$claude\hooks\knowledge-capture-stop.ps1" "$Repo\claude\hooks\knowledge-capture-stop.ps1"
 
 # -- Codex -----------------------------------------------------------------
@@ -953,7 +967,8 @@ Merge-CodexConfig "$Repo\codex\config.toml" "$codex\config.toml"
 # -- Knowledge MCP -----------------------------------------------------------
 
 Write-Host "`nKnowledge MCP" -ForegroundColor Cyan
-Install-KnowledgeMcp $Repo $KnowledgeMcpUrl $KnowledgeMcpToken
+$claudeConfigPaths = @("$env:USERPROFILE\.claude.json") + ($extraClaudeProfileDirectories | ForEach-Object { "$_\.claude.json" })
+Install-KnowledgeMcp $Repo $KnowledgeMcpUrl $KnowledgeMcpToken $claudeConfigPaths
 
 # -- Obsidian ----------------------------------------------------------------
 
@@ -969,30 +984,6 @@ Install-CloudContext $Repo
 
 Write-Host "`nGit" -ForegroundColor Cyan
 Install-GitClear "$Repo\tools\git-clear"
-
-# Wire global git hooks
-$hooksPath = "$Repo\git\hooks"
-$currentHooksPath = git config --global core.hooksPath 2>$null
-if ((-not $currentHooksPath) -and (Test-Path -LiteralPath $hooksPath -PathType Container)) {
-    git config --global core.hooksPath $hooksPath
-    Write-Host "  [config] core.hooksPath = $hooksPath" -ForegroundColor Green
-} elseif ($currentHooksPath -and ($currentHooksPath -ieq $hooksPath) -and (-not (Test-Path -LiteralPath $hooksPath -PathType Container))) {
-    git config --global --unset core.hooksPath
-    Write-Host "  [unset] core.hooksPath pointed at removed repo hooks" -ForegroundColor Yellow
-} else {
-    Write-Host "  [skip] core.hooksPath already set to $currentHooksPath" -ForegroundColor DarkGray
-}
-
-# Remind about the shared git config include
-$configShared = "$Repo\git\config.shared"
-Write-Host @"
-
-  To enable shared git aliases and settings, add this to ~/.gitconfig:
-
-      [include]
-          path = $configShared
-
-"@ -ForegroundColor Yellow
 
 # -- Done ------------------------------------------------------------------
 

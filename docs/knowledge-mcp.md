@@ -34,8 +34,10 @@ This:
 - persists the token as the `KNOWLEDGE_MCP_TOKEN` user environment variable
   (never written to any configuration file),
 - copies `tools\knowledge-mcp\knowledge-mcp-headers.cmd` to `~\.local\bin` and
-  registers the server at user scope in `~\.claude.json` with a
-  `headersHelper` that emits the Authorization header from the environment,
+  registers the server at user scope in `~\.claude.json` and any
+  `~\.claude-work\.claude.json` / `~\.claude-personal\.claude.json` profile
+  files present, with a `headersHelper` that emits the Authorization header
+  from the environment,
 - merges the `[mcp_servers.knowledge]` section into `~\.codex\config.toml`
   (Codex reads the token via `bearer_token_env_var`),
 - installs the `Stop` hook that reminds Claude once per session to store
