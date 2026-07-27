@@ -1,0 +1,67 @@
+<Window x:Class="CloudContext.App.ProfileEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cloud profile" Height="710" Width="690" ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner" Background="#F4F6F8">
+  <Grid Margin="22">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="190" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Identity" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12" />
+        <TextBlock Grid.Row="1" Text="Profile name" VerticalAlignment="Center" />
+        <TextBox x:Name="NameBox" Grid.Row="1" Grid.Column="1" Margin="0,4" />
+        <TextBlock Grid.Row="2" Text="Display name" VerticalAlignment="Center" />
+        <TextBox x:Name="DisplayNameBox" Grid.Row="2" Grid.Column="1" Margin="0,4" />
+        <TextBlock Grid.Row="3" Text="Username" VerticalAlignment="Center" />
+        <TextBox x:Name="UsernameBox" Grid.Row="3" Grid.Column="1" Margin="0,4" />
+        <TextBlock Grid.Row="4" Text="Entra tenant ID" VerticalAlignment="Center" />
+        <TextBox x:Name="TenantBox" Grid.Row="4" Grid.Column="1" Margin="0,4" />
+
+        <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Text="Connections" FontSize="20" FontWeight="SemiBold" Margin="0,20,0,8" />
+        <TextBlock Grid.Row="6" Text="Azure subscriptions" VerticalAlignment="Top" Margin="0,9,0,0" />
+        <TextBox x:Name="SubscriptionsBox" Grid.Row="6" Grid.Column="1" Margin="0,4" MinHeight="48" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" />
+        <TextBlock Grid.Row="7" Text="GitHub host / user / orgs" VerticalAlignment="Top" Margin="0,9,0,0" />
+        <StackPanel Grid.Row="7" Grid.Column="1">
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+            <TextBox x:Name="GitHubHostBox" Margin="0,4,4,4" ToolTip="Host" />
+            <TextBox x:Name="GitHubUserBox" Grid.Column="1" Margin="4" ToolTip="Expected user" />
+          </Grid>
+          <TextBox x:Name="GitHubOrganisationsBox" Margin="0,4" MinHeight="48" AcceptsReturn="True" ToolTip="One organisation per line" />
+        </StackPanel>
+        <TextBlock Grid.Row="8" Text="Azure DevOps orgs" VerticalAlignment="Top" Margin="0,9,0,0" />
+        <TextBox x:Name="AzureDevOpsBox" Grid.Row="8" Grid.Column="1" Margin="0,4" MinHeight="48" AcceptsReturn="True" />
+        <TextBlock Grid.Row="9" Text="Dataverse environments" VerticalAlignment="Top" Margin="0,9,0,0" />
+        <TextBox x:Name="DataverseBox" Grid.Row="9" Grid.Column="1" Margin="0,4" MinHeight="48" AcceptsReturn="True" />
+        <TextBlock Grid.Row="10" Text="Log Analytics workspace IDs" VerticalAlignment="Top" Margin="0,9,0,0" />
+        <TextBox x:Name="LogAnalyticsBox" Grid.Row="10" Grid.Column="1" Margin="0,4" MinHeight="48" AcceptsReturn="True" />
+      </Grid>
+    </ScrollViewer>
+
+    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+      <Button Content="Cancel" IsCancel="True" />
+      <Button Content="Save" IsDefault="True" Click="Save_Click" />
+    </StackPanel>
+  </Grid>
+</Window>

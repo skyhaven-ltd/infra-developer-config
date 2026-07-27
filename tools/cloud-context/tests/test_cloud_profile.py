@@ -38,6 +38,48 @@ class CloudProfileTests(unittest.TestCase):
         self.assertTrue(environment["GH_CONFIG_DIR"].endswith("customer-prod"))
         self.assertEqual(environment["EXISTING"], "value")
 
+    def test_version_two_profile_environment_is_supported(self) -> None:
+        profile = {
+            "name": "customer-prod",
+            "identity": {"tenantId": "tenant-id", "username": "person@example.com"},
+            "connections": {
+                "azure": {"subscriptionIds": ["subscription-id"]},
+                "github": {
+                    "host": "github.com",
+                    "user": "person",
+                    "organisations": ["customer-org"],
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            environment = cloud_profile.profile_environment(Path(directory), profile, {})
+
+        self.assertEqual(environment["AZURE_TENANT_ID"], "tenant-id")
+        self.assertEqual(environment["AZURE_SUBSCRIPTION_ID"], "subscription-id")
+        self.assertEqual(environment["GH_ORG"], "customer-org")
+
+    def test_unconfigured_connections_do_not_inherit_ambient_context(self) -> None:
+        profile = {
+            "name": "metadata-only",
+            "identity": {"username": "person@example.com", "tenantId": ""},
+            "connections": {},
+        }
+        ambient = {
+            "AZURE_TENANT_ID": "wrong-tenant",
+            "AZURE_SUBSCRIPTION_ID": "wrong-subscription",
+            "GH_HOST": "wrong.example.com",
+            "GH_ORG": "wrong-org",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            environment = cloud_profile.profile_environment(
+                Path(directory), profile, ambient
+            )
+
+        self.assertNotIn("AZURE_TENANT_ID", environment)
+        self.assertNotIn("AZURE_SUBSCRIPTION_ID", environment)
+        self.assertNotIn("GH_HOST", environment)
+        self.assertNotIn("GH_ORG", environment)
+
     def test_main_executes_with_named_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -43,3 +43,8 @@
 
 # Microsoft Foundry Skill
 skills/microsoft-foundry/**
+# Local build and publish output
+**/bin/
+**/obj/
+**/__pycache__/
+/artifacts/

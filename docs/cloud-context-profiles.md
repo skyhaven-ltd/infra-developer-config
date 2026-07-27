@@ -5,6 +5,46 @@ uses separate native CLI configuration directories, preventing one tenant or
 GitHub account from silently affecting another profile. Profile metadata does
 not contain passwords, tokens, or client secrets.
 
+## Windows application
+
+Cloud Context includes a Windows GUI for managing identities and their Azure,
+GitHub, Azure DevOps, Dataverse, and Log Analytics connections. It uses the same
+profile store and isolated CLI directories as the PowerShell module and
+`cloud-profile` launcher.
+
+Build and run it for development:
+
+```powershell
+dotnet run --project .\tools\cloud-context\gui\src\CloudContext.App
+```
+
+Create a portable, self-contained ZIP that does not require .NET or local
+administrator rights on the destination machine:
+
+```powershell
+.\scripts\Publish-CloudContext.ps1
+```
+
+Extract `artifacts\cloud-context\cloud-context-win-x64.zip` to a user-writable
+directory and run `CloudContext.exe`. Native CLIs remain separate dependencies:
+Azure CLI can be installed from Microsoft's non-admin ZIP distribution, while
+GitHub and Power Platform connections require `gh` and `pac` respectively.
+
+The GUI reads legacy profiles and writes schema version 2. Version 2 supports
+optional and repeatable connections; the CLI launcher and PowerShell module
+support both formats.
+
+The GUI labels targets separately as configured, connected, unavailable,
+misconfigured, or access denied. Validation checks each subscription, GitHub
+organisation, Azure DevOps organisation, Dataverse authentication profile, and
+Log Analytics workspace without displaying access tokens. Select a Dataverse
+row before choosing **Connect Dataverse** when a profile has several
+environments.
+
+Azure DevOps validation uses the Microsoft Entra session held by Azure CLI.
+Azure DevOps guest accounts that require a personal access token must still use
+`az devops login`; Cloud Context deliberately does not collect or store PATs.
+
 ## Install
 
 Run the developer-config installer and open a new PowerShell session:

@@ -47,43 +47,68 @@ def get_profile(root: Path, name: str) -> dict[str, Any]:
     raise CloudProfileError(f"cloud profile '{name}' does not exist")
 
 
+def azure_settings(profile: dict[str, Any]) -> tuple[str, str]:
+    identity = profile.get("identity") or {}
+    azure = (profile.get("connections") or {}).get("azure") or {}
+    subscriptions = azure.get("subscriptionIds") or []
+    tenant = profile.get("azureTenantId") or identity.get("tenantId") or ""
+    subscription = profile.get("azureSubscriptionId") or (
+        subscriptions[0] if subscriptions else ""
+    )
+    return str(tenant), str(subscription)
+
+
+def github_settings(profile: dict[str, Any]) -> tuple[str, str, str]:
+    github = (profile.get("connections") or {}).get("github") or {}
+    organisations = github.get("organisations") or []
+    host = profile.get("githubHost") or github.get("host") or ""
+    organisation = profile.get("githubOrg") or (
+        organisations[0] if organisations else ""
+    )
+    user = profile.get("githubUser") or github.get("user") or ""
+    return str(host), str(organisation), str(user)
+
+
 def profile_environment(
     root: Path, profile: dict[str, Any], base: dict[str, str]
 ) -> dict[str, str]:
-    required = (
-        "name",
-        "azureTenantId",
-        "azureSubscriptionId",
-        "githubHost",
-        "githubOrg",
-        "githubUser",
-    )
-    missing = [field for field in required if not profile.get(field)]
-    if missing:
-        raise CloudProfileError(
-            f"profile '{profile.get('name', '<unknown>')}' is missing: {', '.join(missing)}"
-        )
+    if not profile.get("name"):
+        raise CloudProfileError("profile is missing: name")
 
     name = str(profile["name"])
+    tenant, subscription = azure_settings(profile)
+    github_host, github_org, _ = github_settings(profile)
     azure_directory = root / "cli" / "azure" / name
     github_directory = root / "cli" / "github" / name
     azure_directory.mkdir(parents=True, exist_ok=True)
     github_directory.mkdir(parents=True, exist_ok=True)
 
     environment = base.copy()
-    environment.update(
-        {
-            "CLOUD_PROFILE": name,
-            "AZURE_CONFIG_DIR": str(azure_directory),
-            "AZURE_TENANT_ID": str(profile["azureTenantId"]),
-            "AZURE_SUBSCRIPTION_ID": str(profile["azureSubscriptionId"]),
-            "ARM_TENANT_ID": str(profile["azureTenantId"]),
-            "ARM_SUBSCRIPTION_ID": str(profile["azureSubscriptionId"]),
-            "GH_CONFIG_DIR": str(github_directory),
-            "GH_HOST": str(profile["githubHost"]),
-            "GH_ORG": str(profile["githubOrg"]),
-        }
-    )
+    for variable in (
+        "AZURE_TENANT_ID",
+        "AZURE_SUBSCRIPTION_ID",
+        "ARM_TENANT_ID",
+        "ARM_SUBSCRIPTION_ID",
+        "GH_HOST",
+        "GH_ORG",
+    ):
+        environment.pop(variable, None)
+    environment.update({
+        "CLOUD_PROFILE": name,
+        "AZURE_CONFIG_DIR": str(azure_directory),
+        "GH_CONFIG_DIR": str(github_directory),
+    })
+    if tenant:
+        environment.update({"AZURE_TENANT_ID": tenant, "ARM_TENANT_ID": tenant})
+    if subscription:
+        environment.update({
+            "AZURE_SUBSCRIPTION_ID": subscription,
+            "ARM_SUBSCRIPTION_ID": subscription,
+        })
+    if github_host:
+        environment["GH_HOST"] = github_host
+    if github_org:
+        environment["GH_ORG"] = github_org
     return environment
 
 
@@ -107,6 +132,11 @@ def run_capture(command: list[str], environment: dict[str, str]) -> subprocess.C
 
 
 def validate_azure(profile: dict[str, Any], environment: dict[str, str]) -> None:
+    tenant, subscription = azure_settings(profile)
+    if not tenant or not subscription:
+        raise CloudProfileError(
+            f"Azure is not configured for profile '{profile['name']}'"
+        )
     result = run_capture([executable("az"), "account", "show", "--output", "json"], environment)
     if result.returncode != 0:
         raise CloudProfileError(
@@ -118,35 +148,42 @@ def validate_azure(profile: dict[str, Any], environment: dict[str, str]) -> None
         raise CloudProfileError("Azure CLI returned an invalid account response") from error
     if (
         str(account.get("tenantId", "")).casefold()
-        != str(profile["azureTenantId"]).casefold()
+        != tenant.casefold()
         or str(account.get("id", "")).casefold()
-        != str(profile["azureSubscriptionId"]).casefold()
+        != subscription.casefold()
     ):
         raise CloudProfileError(
             "Azure context mismatch: expected "
-            f"tenant '{profile['azureTenantId']}' and subscription "
-            f"'{profile['azureSubscriptionId']}', got tenant "
+            f"tenant '{tenant}' and subscription "
+            f"'{subscription}', got tenant "
             f"'{account.get('tenantId')}' and subscription '{account.get('id')}'"
         )
 
 
 def validate_github(profile: dict[str, Any], environment: dict[str, str]) -> None:
+    host, _, expected_user = github_settings(profile)
+    if not host:
+        raise CloudProfileError(
+            f"GitHub is not configured for profile '{profile['name']}'"
+        )
     gh = executable("gh")
     status = run_capture(
-        [gh, "auth", "status", "--hostname", str(profile["githubHost"])], environment
+        [gh, "auth", "status", "--hostname", host], environment
     )
     if status.returncode != 0:
         raise CloudProfileError(
             f"GitHub CLI is not authenticated for profile '{profile['name']}'"
         )
     identity = run_capture(
-        [gh, "api", "--hostname", str(profile["githubHost"]), "user", "--jq", ".login"],
+        [gh, "api", "--hostname", host, "user", "--jq", ".login"],
         environment,
     )
     login = identity.stdout.strip()
-    if identity.returncode != 0 or login.casefold() != str(profile["githubUser"]).casefold():
+    if identity.returncode != 0 or (
+        expected_user and login.casefold() != expected_user.casefold()
+    ):
         raise CloudProfileError(
-            f"GitHub identity mismatch: expected '{profile['githubUser']}', got '{login}'"
+            f"GitHub identity mismatch: expected '{expected_user}', got '{login}'"
         )
 
 
@@ -167,14 +204,19 @@ def prepare_command(command: list[str], profile: dict[str, Any]) -> list[str]:
         prepared[0] = executable(prepared[0])
         return prepared
     path = command[1].lstrip("/") if len(command) > 1 else ""
-    endpoint = f"orgs/{profile['githubOrg']}"
+    host, organisation, _ = github_settings(profile)
+    if not host or not organisation:
+        raise CloudProfileError(
+            f"GitHub organisation is not configured for profile '{profile['name']}'"
+        )
+    endpoint = f"orgs/{organisation}"
     if path:
         endpoint = f"{endpoint}/{path}"
     return [
         executable("gh"),
         "api",
         "--hostname",
-        str(profile["githubHost"]),
+        host,
         endpoint,
         *command[2:],
     ]
@@ -221,9 +263,11 @@ def main(arguments: list[str] | None = None) -> int:
 
         environment = profile_environment(root, profile, dict(os.environ))
         target = validation_target(command, args.validate)
-        if target in {"azure", "both"}:
+        tenant, subscription = azure_settings(profile)
+        github_host, _, _ = github_settings(profile)
+        if target == "azure" or (target == "both" and tenant and subscription):
             validate_azure(profile, environment)
-        if target in {"github", "both"}:
+        if target == "github" or (target == "both" and github_host):
             validate_github(profile, environment)
         completed = subprocess.run(prepare_command(command, profile), env=environment, check=False)
         return completed.returncode

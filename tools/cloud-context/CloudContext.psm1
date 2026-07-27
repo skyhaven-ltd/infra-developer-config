@@ -17,7 +17,7 @@ function Get-CloudProfileFile {
 function Read-CloudProfileStore {
     $path = Get-CloudProfileFile
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        return [pscustomobject]@{ profiles = @() }
+        return [pscustomobject]@{ schemaVersion = 2; profiles = @() }
     }
 
     $store = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
@@ -25,7 +25,68 @@ function Read-CloudProfileStore {
         throw "Cloud profile file '$path' must contain a 'profiles' array."
     }
 
+    if (-not ($store.PSObject.Properties.Name -contains "schemaVersion")) {
+        $migratedProfiles = foreach ($profile in @($store.profiles)) {
+            [pscustomobject]@{
+                name = $profile.name
+                displayName = $profile.name
+                identity = [pscustomobject]@{
+                    username = ""
+                    tenantId = $profile.azureTenantId
+                }
+                connections = [pscustomobject]@{
+                    azure = if ($profile.azureSubscriptionId) {
+                        [pscustomobject]@{ subscriptionIds = @($profile.azureSubscriptionId) }
+                    } else { $null }
+                    github = if ($profile.githubHost -or $profile.githubOrg) {
+                        [pscustomobject]@{
+                            host = if ($profile.githubHost) { $profile.githubHost } else { "github.com" }
+                            user = $profile.githubUser
+                            organisations = @($profile.githubOrg | Where-Object { $_ })
+                        }
+                    } else { $null }
+                    azureDevOps = $null
+                    dataverse = $null
+                    logAnalytics = $null
+                }
+            }
+        }
+        return [pscustomobject]@{ schemaVersion = 2; profiles = @($migratedProfiles) }
+    }
+    if ($store.schemaVersion -ne 2) {
+        throw "Unsupported cloud profile schema version '$($store.schemaVersion)'."
+    }
+
     return $store
+}
+
+function Get-CloudProfileTenantId {
+    param([Parameter(Mandatory = $true)]$Profile)
+    if ($Profile.PSObject.Properties.Name -contains "identity") { return $Profile.identity.tenantId }
+    return $Profile.azureTenantId
+}
+
+function Get-CloudProfileSubscriptionId {
+    param([Parameter(Mandatory = $true)]$Profile)
+    if ($Profile.PSObject.Properties.Name -contains "connections") {
+        $subscriptions = @($Profile.connections.azure.subscriptionIds)
+        if ($subscriptions.Count -gt 0) { return $subscriptions[0] }
+        return $null
+    }
+    return $Profile.azureSubscriptionId
+}
+
+function Get-CloudProfileGitHub {
+    param([Parameter(Mandatory = $true)]$Profile)
+    if ($Profile.PSObject.Properties.Name -contains "connections") {
+        if ($Profile.connections.github) { return $Profile.connections.github }
+        return [pscustomobject]@{ host = ""; user = ""; organisations = @() }
+    }
+    return [pscustomobject]@{
+        host = $Profile.githubHost
+        user = $Profile.githubUser
+        organisations = @($Profile.githubOrg)
+    }
 }
 
 function Write-CloudProfileStore {
@@ -85,15 +146,26 @@ function New-CloudProfile {
 
     $profile = [ordered]@{
         name = $Name
-        azureTenantId = $AzureTenantId
-        azureSubscriptionId = $AzureSubscriptionId
-        githubHost = $GitHubHost
-        githubOrg = $GitHubOrg
+        displayName = $Name
+        identity = [ordered]@{
+            username = ""
+            tenantId = $AzureTenantId
+        }
+        connections = [ordered]@{
+            azure = [ordered]@{ subscriptionIds = @($AzureSubscriptionId) }
+            github = [ordered]@{
+                host = $GitHubHost
+                user = $GitHubUser
+                organisations = @($GitHubOrg)
+            }
+            azureDevOps = $null
+            dataverse = $null
+            logAnalytics = $null
+        }
     }
-    $profile.githubUser = $GitHubUser
 
     $remaining = @($profiles | Where-Object { $_.name -ne $Name })
-    $updatedStore = [ordered]@{ profiles = @($remaining) + @([pscustomobject]$profile) }
+    $updatedStore = [ordered]@{ schemaVersion = 2; profiles = @($remaining) + @([pscustomobject]$profile) }
     if ($PSCmdlet.ShouldProcess($Name, "Create cloud profile")) {
         Write-CloudProfileStore $updatedStore
     }
@@ -113,6 +185,7 @@ function Remove-CloudProfile {
 
     if ($PSCmdlet.ShouldProcess($Name, "Remove cloud profile metadata (CLI credentials are retained)")) {
         Write-CloudProfileStore ([ordered]@{
+            schemaVersion = 2
             profiles = @($profiles | Where-Object { $_.name -ne $Name })
         })
     }
@@ -130,11 +203,17 @@ function Set-CloudProfileEnvironment {
 
     $env:CLOUD_PROFILE = $Profile.name
     $env:AZURE_CONFIG_DIR = $azureConfig
-    $env:AZURE_TENANT_ID = $Profile.azureTenantId
-    $env:AZURE_SUBSCRIPTION_ID = $Profile.azureSubscriptionId
+    $tenantId = Get-CloudProfileTenantId $Profile
+    $subscriptionId = Get-CloudProfileSubscriptionId $Profile
+    $github = Get-CloudProfileGitHub $Profile
+    $env:AZURE_TENANT_ID = $tenantId
+    $env:AZURE_SUBSCRIPTION_ID = $subscriptionId
+    $env:ARM_TENANT_ID = $tenantId
+    $env:ARM_SUBSCRIPTION_ID = $subscriptionId
     $env:GH_CONFIG_DIR = $githubConfig
-    $env:GH_HOST = $Profile.githubHost
-    $env:GH_ORG = $Profile.githubOrg
+    $env:GH_HOST = $github.host
+    $githubOrganisations = @($github.organisations)
+    $env:GH_ORG = if ($githubOrganisations.Count -gt 0) { $githubOrganisations[0] } else { $null }
 }
 
 function Use-CloudProfile {
@@ -210,11 +289,16 @@ function Show-CloudContext {
     }
 
     $profile = Get-CloudProfile -Name $env:CLOUD_PROFILE
+    $github = Get-CloudProfileGitHub $profile
+    $githubOrganisations = @($github.organisations)
+    $githubDisplay = if ($github.host) {
+        "$($github.host)/$(if ($githubOrganisations.Count -gt 0) { $githubOrganisations[0] })"
+    } else { "Not configured" }
     [pscustomobject]@{
         Profile = $profile.name
-        AzureTenant = $profile.azureTenantId
-        AzureSubscription = $profile.azureSubscriptionId
-        GitHub = "$($profile.githubHost)/$($profile.githubOrg)"
+        AzureTenant = Get-CloudProfileTenantId $profile
+        AzureSubscription = Get-CloudProfileSubscriptionId $profile
+        GitHub = $githubDisplay
         AzureConfigDirectory = $env:AZURE_CONFIG_DIR
         GitHubConfigDirectory = $env:GH_CONFIG_DIR
     } | Format-List | Out-Host
@@ -241,24 +325,31 @@ function Assert-CloudContext {
     $profile = Get-CloudProfile -Name $env:CLOUD_PROFILE
 
     if (-not $GitHubOnly) {
+        $expectedTenant = Get-CloudProfileTenantId $profile
+        $expectedSubscription = Get-CloudProfileSubscriptionId $profile
+        if (-not $expectedTenant -or -not $expectedSubscription) {
+            throw "Azure is not configured for cloud profile '$($profile.name)'."
+        }
         $account = Get-AzureContext
         if (-not $account) {
             throw "Azure CLI is not authenticated for profile '$($profile.name)'. Run Connect-CloudProfile -AzureOnly."
         }
-        if ($account.tenantId -ne $profile.azureTenantId -or $account.id -ne $profile.azureSubscriptionId) {
-            throw "Azure context mismatch for '$($profile.name)'. Expected tenant '$($profile.azureTenantId)' and subscription '$($profile.azureSubscriptionId)', got tenant '$($account.tenantId)' and subscription '$($account.id)'."
+        if ($account.tenantId -ne $expectedTenant -or $account.id -ne $expectedSubscription) {
+            throw "Azure context mismatch for '$($profile.name)'. Expected tenant '$expectedTenant' and subscription '$expectedSubscription', got tenant '$($account.tenantId)' and subscription '$($account.id)'."
         }
     }
 
     if (-not $AzureOnly) {
-        & gh auth status --hostname $profile.githubHost 2>$null | Out-Null
+        $github = Get-CloudProfileGitHub $profile
+        if (-not $github.host) { throw "GitHub is not configured for cloud profile '$($profile.name)'." }
+        & gh auth status --hostname $github.host 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            throw "GitHub CLI is not authenticated for '$($profile.githubHost)' in profile '$($profile.name)'. Run Connect-CloudProfile -GitHubOnly."
+            throw "GitHub CLI is not authenticated for '$($github.host)' in profile '$($profile.name)'. Run Connect-CloudProfile -GitHubOnly."
         }
-        if ($profile.PSObject.Properties.Name -contains "githubUser") {
-            $login = & gh api --hostname $profile.githubHost user --jq .login 2>$null
-            if ($LASTEXITCODE -ne 0 -or $login -ne $profile.githubUser) {
-                throw "GitHub user mismatch for '$($profile.name)'. Expected '$($profile.githubUser)', got '$login'."
+        if ($github.user) {
+            $login = & gh api --hostname $github.host user --jq .login 2>$null
+            if ($LASTEXITCODE -ne 0 -or $login -ne $github.user) {
+                throw "GitHub user mismatch for '$($profile.name)'. Expected '$($github.user)', got '$login'."
             }
         }
     }
@@ -279,14 +370,17 @@ function Connect-CloudProfile {
     $profile = Get-CloudProfile -Name $env:CLOUD_PROFILE
 
     if (-not $GitHubOnly) {
-        & az login --tenant $profile.azureTenantId
+        $tenantId = Get-CloudProfileTenantId $profile
+        $subscriptionId = Get-CloudProfileSubscriptionId $profile
+        & az login --tenant $tenantId
         if ($LASTEXITCODE -ne 0) { throw "Azure CLI login failed." }
-        & az account set --subscription $profile.azureSubscriptionId
-        if ($LASTEXITCODE -ne 0) { throw "Unable to select Azure subscription '$($profile.azureSubscriptionId)'." }
+        & az account set --subscription $subscriptionId
+        if ($LASTEXITCODE -ne 0) { throw "Unable to select Azure subscription '$subscriptionId'." }
     }
 
     if (-not $AzureOnly) {
-        & gh auth login --hostname $profile.githubHost
+        $github = Get-CloudProfileGitHub $profile
+        & gh auth login --hostname $github.host
         if ($LASTEXITCODE -ne 0) { throw "GitHub CLI login failed." }
     }
 
@@ -320,12 +414,17 @@ function Invoke-ProfileGhOrgApi {
 
     Assert-CloudContext -GitHubOnly | Out-Null
     $profile = Get-CloudProfile -Name $env:CLOUD_PROFILE
-    $endpoint = "orgs/$($profile.githubOrg)"
+    $github = Get-CloudProfileGitHub $profile
+    $githubOrganisations = @($github.organisations)
+    if ($githubOrganisations.Count -eq 0) {
+        throw "GitHub organisation is not configured for cloud profile '$($profile.name)'."
+    }
+    $endpoint = "orgs/$($githubOrganisations[0])"
     if ($Path) {
         $endpoint = "$endpoint/$($Path.TrimStart('/'))"
     }
 
-    & gh api --hostname $profile.githubHost --method $Method $endpoint @Arguments
+    & gh api --hostname $github.host --method $Method $endpoint @Arguments
 }
 
 Set-Alias -Name azp -Value Invoke-ProfileAz

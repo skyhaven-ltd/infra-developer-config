@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/CloudContext.Core/CloudContext.Core.csproj" />
+  <Project Path="src/CloudContext.App/CloudContext.App.csproj" />
+  <Project Path="tests/CloudContext.Core.Tests/CloudContext.Core.Tests.csproj" />
+</Solution>

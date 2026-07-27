@@ -1,0 +1,73 @@
+<Window x:Class="CloudContext.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cloud Context" Height="720" Width="1120" MinHeight="620" MinWidth="900"
+        WindowStartupLocation="CenterScreen" Background="#F4F6F8">
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="270" />
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
+
+    <Border Grid.Column="0" Background="#172A3A" Padding="18">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Top">
+          <TextBlock Text="Cloud Context" Foreground="White" FontSize="24" FontWeight="SemiBold" />
+          <TextBlock Text="Isolated customer identities" Foreground="#B7C8D6" Margin="0,3,0,18" />
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,12,0,0">
+          <Button Content="Add" Click="AddProfile_Click" />
+          <Button Content="Edit" Click="EditProfile_Click" />
+          <Button Content="Remove" Click="RemoveProfile_Click" />
+        </StackPanel>
+        <ListBox x:Name="ProfilesList" DisplayMemberPath="Label" SelectionChanged="ProfilesList_SelectionChanged"
+                 BorderThickness="0" Background="#213C50" Foreground="White" Padding="3" />
+      </DockPanel>
+    </Border>
+
+    <Grid Grid.Column="1" Margin="26,22">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+
+      <Grid Grid.Row="0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <StackPanel>
+          <TextBlock x:Name="ProfileNameText" Text="Select a profile" FontSize="27" FontWeight="SemiBold" Foreground="#172A3A" />
+          <TextBlock x:Name="IdentityText" Text="Add a profile to get started." Foreground="#526879" Margin="0,4,0,0" />
+        </StackPanel>
+        <Button Grid.Column="1" Content="Validate all" Click="ValidateAll_Click" VerticalAlignment="Top" />
+      </Grid>
+
+      <WrapPanel Grid.Row="1" Margin="0,22,0,10">
+        <Button x:Name="AzureSignInButton" Content="Sign in to Azure" Click="AzureSignIn_Click" />
+        <Button x:Name="GitHubSignInButton" Content="Sign in to GitHub" Click="GitHubSignIn_Click" />
+        <Button x:Name="DataverseSignInButton" Content="Connect Dataverse" Click="DataverseSignIn_Click" />
+        <Button Content="Open PowerShell" Click="OpenPowerShell_Click" />
+        <Button Content="Open data folder" Click="OpenDataFolder_Click" />
+      </WrapPanel>
+
+      <Border Grid.Row="2" Background="White" BorderBrush="#D5DEE5" BorderThickness="1" CornerRadius="4" Padding="1">
+        <DataGrid x:Name="ConnectionsGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderThickness="0">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Connection" Binding="{Binding Kind}" Width="130" />
+            <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="2*" />
+            <DataGridTextColumn Header="State" Binding="{Binding State}" Width="125" />
+            <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="3*" />
+          </DataGrid.Columns>
+        </DataGrid>
+      </Border>
+
+      <Border Grid.Row="3" Background="#E8EDF1" Padding="10" Margin="0,12,0,0" CornerRadius="3">
+        <TextBlock x:Name="ActivityText" Text="Ready." Foreground="#344B5E" />
+      </Border>
+    </Grid>
+  </Grid>
+</Window>
