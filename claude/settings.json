@@ -35,6 +35,20 @@
           {
             "type": "command",
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"%USERPROFILE%\\.claude\\hooks\\knowledge-capture-stop.ps1\""
+          },
+          {
+            "type": "command",
+            "command": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%USERPROFILE%\\.local\\bin\\agent-notify.ps1\" -Source \"Claude Code\" -Event Complete"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%USERPROFILE%\\.local\\bin\\agent-notify.ps1\" -Source \"Claude Code\" -Event Permission"
           }
         ]
       }

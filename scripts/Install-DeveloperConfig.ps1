@@ -509,7 +509,7 @@ function Read-SharedCodexConfig {
         if ($null -eq $keyName) { continue }
 
         $qualifiedKey = if ($section) { "$section.$keyName" } else { $keyName }
-        if (@("approval_policy", "sandbox_mode", "windows.sandbox") -contains $qualifiedKey) {
+        if (@("notify", "approval_policy", "sandbox_mode", "windows.sandbox") -contains $qualifiedKey) {
             $shared[$qualifiedKey] = $line
         }
     }
@@ -677,9 +677,14 @@ function Merge-CodexConfig {
 
     $lines = @(Remove-TomlScalarLine -Lines $lines -QualifiedKey "model_instructions_file")
 
-    foreach ($qualifiedKey in @("approval_policy", "sandbox_mode", "windows.sandbox")) {
+    foreach ($qualifiedKey in @("notify", "approval_policy", "sandbox_mode", "windows.sandbox")) {
         if ($shared.ContainsKey($qualifiedKey)) {
-            $lines = @(Set-TomlScalarLine -Lines $lines -QualifiedKey $qualifiedKey -ReplacementLine $shared[$qualifiedKey])
+            $replacementLine = $shared[$qualifiedKey]
+            if ($qualifiedKey -eq "notify") {
+                $escapedProfile = $env:USERPROFILE.Replace("\", "\\")
+                $replacementLine = $replacementLine.Replace("%USERPROFILE%", $escapedProfile)
+            }
+            $lines = @(Set-TomlScalarLine -Lines $lines -QualifiedKey $qualifiedKey -ReplacementLine $replacementLine)
         }
     }
 
@@ -937,6 +942,14 @@ $skills = @(Get-RepoSkills $repoSkills)
 Install-Skills "$claude\skills" $repoSkills "Claude" $skills
 Install-Skills "$codex\skills" $repoSkills "Codex" $skills
 Remove-LegacyAgentsSkillsJunction "$env:USERPROFILE\.agents\skills" "$Repo\skills"
+
+# -- Shared agent notifier --------------------------------------------------
+
+$notifierSource = "$Repo\tools\agent-notifier\agent-notify.ps1"
+$notifierDestination = "$env:USERPROFILE\.local\bin\agent-notify.ps1"
+New-Item -ItemType Directory -Path (Split-Path $notifierDestination) -Force | Out-Null
+Copy-Item -LiteralPath $notifierSource -Destination $notifierDestination -Force
+Write-Host "  [copy]    $notifierDestination <- $notifierSource" -ForegroundColor Green
 
 # -- Claude ----------------------------------------------------------------
 
