@@ -28,7 +28,7 @@ try {
         -p:DebugType=None `
         -p:DebugSymbols=false
     if ($LASTEXITCODE -ne 0) {
-        throw "Cloud Context publish failed with exit code $LASTEXITCODE."
+        throw "Cloud Connect publish failed with exit code $LASTEXITCODE."
     }
 
     Copy-Item `
@@ -37,7 +37,7 @@ try {
 
     $archivePath = Join-Path $resolvedOutput "cloud-context-$Runtime.zip"
     Compress-Archive -Path (Join-Path $stagingDirectory "*") -DestinationPath $archivePath -Force
-    Write-Output "Published portable Cloud Context application: $archivePath"
+    Write-Output "Published portable Cloud Connect application: $archivePath"
 } finally {
     $resolvedStaging = [System.IO.Path]::GetFullPath($stagingDirectory)
     $resolvedTemporaryRoot = [System.IO.Path]::GetFullPath($temporaryRoot).TrimEnd("\") + "\"

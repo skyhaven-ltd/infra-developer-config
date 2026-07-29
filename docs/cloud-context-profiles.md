@@ -7,7 +7,7 @@ not contain passwords, tokens, or client secrets.
 
 ## Windows application
 
-Cloud Context includes a Windows GUI for managing identities and their Azure,
+Cloud Connect is the Windows GUI for managing Cloud Context identities and their Azure,
 GitHub, Azure DevOps, Dataverse, and Log Analytics connections. It uses the same
 profile store and isolated CLI directories as the PowerShell module and
 `cloud-profile` launcher.
@@ -26,13 +26,28 @@ administrator rights on the destination machine:
 ```
 
 Extract `artifacts\cloud-context\cloud-context-win-x64.zip` to a user-writable
-directory and run `CloudContext.exe`. Native CLIs remain separate dependencies:
+directory and run `CloudConnect.exe`. Native CLIs remain separate dependencies:
 Azure CLI can be installed from Microsoft's non-admin ZIP distribution, while
 GitHub and Power Platform connections require `gh` and `pac` respectively.
 
 The GUI reads legacy profiles and writes schema version 2. Version 2 supports
 optional and repeatable connections; the CLI launcher and PowerShell module
 support both formats.
+
+Profiles can be organised into nested customer folders from the profile editor;
+use `/` between levels, for example `Customers/Highways`. Existing profiles with
+no folder remain at the sidebar root.
+
+The profile editor shows only connection types already configured for that
+identity. Add another type with **Add connection**, update the selected target
+with **Edit selected**, or remove it with **Remove selected**. Authentication
+buttons are shown only for connection types configured on the selected profile.
+
+Azure browser sign-in intentionally does not pass the profile username through
+Azure CLI's password-based `--username` option because that flow is incompatible
+with MFA. After a successful browser sign-in, Cloud Context fills an empty
+profile username from `az account show`. Once populated, validation rejects a
+different signed-in username instead of silently accepting the wrong identity.
 
 The GUI labels targets separately as configured, connected, unavailable,
 misconfigured, or access denied. Validation checks each subscription, GitHub
@@ -41,9 +56,29 @@ Log Analytics workspace without displaying access tokens. Select a Dataverse
 row before choosing **Connect Dataverse** when a profile has several
 environments.
 
+**Validate selected** checks the open identity. The sidebar **Validate all**
+checks every identity and every configured connection in one pass.
+Validation results are cached separately for each profile while the application
+is running, so switching identities does not reset the displayed state. Results
+are deliberately rechecked after application restart or connection changes.
+GitHub shows one row per configured organisation; the expected username and
+organisation access result are combined in that row's detail.
+
 Azure DevOps validation uses the Microsoft Entra session held by Azure CLI.
 Azure DevOps guest accounts that require a personal access token must still use
 `az devops login`; Cloud Context deliberately does not collect or store PATs.
+
+Selecting an identity in the GUI does not change the default used by external
+shells. Choose **Make active** to update the existing `active-profile` contract;
+new PowerShell sessions then restore that identity. An already-open shell keeps
+its current environment until `Use-CloudProfile <name>` is run there.
+
+When moving frequently between customer accounts, prefer **Open scoped
+PowerShell** or `cloud-profile <name> -- <command>`. These bind Azure and GitHub
+state to the chosen profile for that process and avoid relying on a mutable
+global default. Power Platform CLI maintains its own named authentication
+profiles. Select a Dataverse or Azure row before choosing **Make active** when
+you also want Cloud Context to select that native target.
 
 ## Install
 

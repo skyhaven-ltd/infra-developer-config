@@ -84,6 +84,51 @@ public sealed class CliOrchestrator(ProfileStore store)
             profile,
             cancellationToken);
 
+    public Task<CommandResult> SelectAzureSubscriptionAsync(
+        CloudProfile profile,
+        string subscription,
+        CancellationToken cancellationToken = default) =>
+        RunCapturedAsync(
+            "az", ["account", "set", "--subscription", subscription], profile, cancellationToken);
+
+    public Task<CommandResult> SelectDataverseAsync(
+        CloudProfile profile,
+        string environment,
+        CancellationToken cancellationToken = default) =>
+        RunCapturedAsync(
+            "pac", ["auth", "select", "--name", DataverseProfileName(profile, environment)], profile, cancellationToken);
+
+    public async Task<string?> GetAzureUsernameAsync(
+        CloudProfile profile,
+        CancellationToken cancellationToken = default)
+    {
+        string? subscription = profile.Connections.Azure?.SubscriptionIds.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(subscription))
+        {
+            return null;
+        }
+
+        CommandResult result = await RunCapturedAsync(
+            "az", ["account", "show", "--subscription", subscription, "--output", "json"], profile, cancellationToken);
+        if (!result.Succeeded)
+        {
+            return null;
+        }
+
+        try
+        {
+            using JsonDocument account = JsonDocument.Parse(result.StandardOutput);
+            return account.RootElement.TryGetProperty("user", out JsonElement user) &&
+                   user.TryGetProperty("name", out JsonElement name)
+                ? name.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     public async Task<IReadOnlyList<ConnectionStatus>> ValidateAllAsync(
         CloudProfile profile,
         CancellationToken cancellationToken = default)
@@ -99,10 +144,32 @@ public sealed class CliOrchestrator(ProfileStore store)
 
         if (profile.Connections.GitHub is not null)
         {
-            statuses.Add(await ValidateGitHubAsync(profile, cancellationToken));
-            foreach (string organisation in profile.Connections.GitHub.Organisations)
+            ConnectionStatus identity = await ValidateGitHubAsync(profile, cancellationToken);
+            if (profile.Connections.GitHub.Organisations.Count == 0)
             {
-                statuses.Add(await ValidateGitHubOrganisationAsync(profile, organisation, cancellationToken));
+                statuses.Add(identity);
+            }
+            else if (identity.State != ConnectionState.Connected)
+            {
+                foreach (string organisation in profile.Connections.GitHub.Organisations)
+                {
+                    statuses.Add(new ConnectionStatus(
+                        ConnectionKind.GitHub,
+                        organisation,
+                        identity.State,
+                        identity.Detail,
+                        true));
+                }
+            }
+            else
+            {
+                foreach (string organisation in profile.Connections.GitHub.Organisations)
+                {
+                    ConnectionStatus access = await ValidateGitHubOrganisationAsync(profile, organisation, cancellationToken);
+                    statuses.Add(access.State == ConnectionState.Connected
+                        ? access with { Detail = $"{identity.Detail} Organisation access verified." }
+                        : access);
+                }
             }
         }
 
@@ -140,14 +207,14 @@ public sealed class CliOrchestrator(ProfileStore store)
     {
         if (!IsAvailable("az"))
         {
-            return Status(ConnectionKind.Azure, "Azure CLI", ConnectionState.Unavailable, "Azure CLI was not found.");
+            return Status(ConnectionKind.Azure, subscription, ConnectionState.Unavailable, "Azure CLI was not found.", true);
         }
 
         CommandResult result = await RunCapturedAsync(
             "az", ["account", "show", "--subscription", subscription, "--output", "json"], profile, cancellationToken);
         if (!result.Succeeded)
         {
-            return Status(ConnectionKind.Azure, "Azure CLI", ConnectionState.NeedsSignIn, SafeError(result));
+            return Status(ConnectionKind.Azure, subscription, ConnectionState.NeedsSignIn, SafeError(result), true);
         }
 
         try
@@ -155,15 +222,22 @@ public sealed class CliOrchestrator(ProfileStore store)
             using JsonDocument account = JsonDocument.Parse(result.StandardOutput);
             string tenant = account.RootElement.GetProperty("tenantId").GetString() ?? string.Empty;
             string returnedSubscription = account.RootElement.GetProperty("id").GetString() ?? string.Empty;
+            string returnedUsername = account.RootElement.TryGetProperty("user", out JsonElement user) &&
+                                      user.TryGetProperty("name", out JsonElement name)
+                ? name.GetString() ?? string.Empty
+                : string.Empty;
+            bool usernameMatches = string.IsNullOrWhiteSpace(profile.Identity.Username) ||
+                                   returnedUsername.Equals(profile.Identity.Username, StringComparison.OrdinalIgnoreCase);
             bool matches = tenant.Equals(profile.Identity.TenantId, StringComparison.OrdinalIgnoreCase) &&
-                           returnedSubscription.Equals(subscription, StringComparison.OrdinalIgnoreCase);
+                           returnedSubscription.Equals(subscription, StringComparison.OrdinalIgnoreCase) &&
+                           usernameMatches;
             return matches
-                ? Status(ConnectionKind.Azure, subscription, ConnectionState.Connected, "Tenant and subscription match.")
-                : Status(ConnectionKind.Azure, subscription, ConnectionState.Misconfigured, "The returned tenant or subscription does not match this profile.");
+                ? Status(ConnectionKind.Azure, subscription, ConnectionState.Connected, $"Signed in as {returnedUsername}; tenant and subscription match.", true)
+                : Status(ConnectionKind.Azure, subscription, ConnectionState.Misconfigured, $"Returned identity '{returnedUsername}', tenant, or subscription does not match this profile.", true);
         }
         catch (JsonException)
         {
-            return Status(ConnectionKind.Azure, "Azure CLI", ConnectionState.Misconfigured, "Azure CLI returned an invalid account response.");
+            return Status(ConnectionKind.Azure, subscription, ConnectionState.Misconfigured, "Azure CLI returned an invalid account response.", true);
         }
     }
 
@@ -172,7 +246,7 @@ public sealed class CliOrchestrator(ProfileStore store)
         GitHubConnection github = profile.Connections.GitHub!;
         if (!IsAvailable("gh"))
         {
-            return Status(ConnectionKind.GitHub, github.Host, ConnectionState.Unavailable, "GitHub CLI was not found.");
+            return Status(ConnectionKind.GitHub, github.Host, ConnectionState.Unavailable, "GitHub CLI was not found.", true);
         }
 
         CommandResult result = await RunCapturedAsync(
@@ -180,12 +254,12 @@ public sealed class CliOrchestrator(ProfileStore store)
         string login = result.StandardOutput.Trim();
         if (!result.Succeeded)
         {
-            return Status(ConnectionKind.GitHub, github.Host, ConnectionState.NeedsSignIn, SafeError(result));
+            return Status(ConnectionKind.GitHub, github.Host, ConnectionState.NeedsSignIn, SafeError(result), true);
         }
 
         return string.IsNullOrWhiteSpace(github.User) || login.Equals(github.User, StringComparison.OrdinalIgnoreCase)
-            ? Status(ConnectionKind.GitHub, $"{github.Host} identity", ConnectionState.Connected, $"Signed in as {login}.")
-            : Status(ConnectionKind.GitHub, github.Host, ConnectionState.Misconfigured, $"Signed in as {login}; expected {github.User}.");
+            ? Status(ConnectionKind.GitHub, github.Host, ConnectionState.Connected, $"Signed in as {login}.", true)
+            : Status(ConnectionKind.GitHub, github.Host, ConnectionState.Misconfigured, $"Signed in as {login}; expected {github.User}.", true);
     }
 
     private async Task<ConnectionStatus> ValidateGitHubOrganisationAsync(
@@ -196,7 +270,7 @@ public sealed class CliOrchestrator(ProfileStore store)
         GitHubConnection github = profile.Connections.GitHub!;
         if (!IsAvailable("gh"))
         {
-            return Status(ConnectionKind.GitHub, organisation, ConnectionState.Unavailable, "GitHub CLI was not found.");
+            return Status(ConnectionKind.GitHub, organisation, ConnectionState.Unavailable, "GitHub CLI was not found.", true);
         }
 
         CommandResult result = await RunCapturedAsync(
@@ -211,7 +285,7 @@ public sealed class CliOrchestrator(ProfileStore store)
     {
         if (!IsAvailable("az"))
         {
-            return Status(ConnectionKind.AzureDevOps, organisation, ConnectionState.Unavailable, "Azure CLI was not found.");
+            return Status(ConnectionKind.AzureDevOps, organisation, ConnectionState.Unavailable, "Azure CLI was not found.", true);
         }
 
         CommandResult result = await RunCapturedAsync(
@@ -226,14 +300,13 @@ public sealed class CliOrchestrator(ProfileStore store)
     {
         if (!IsAvailable("pac"))
         {
-            return Status(ConnectionKind.Dataverse, environment, ConnectionState.Unavailable, "Power Platform CLI was not found.");
+            return Status(ConnectionKind.Dataverse, environment, ConnectionState.Unavailable, "Power Platform CLI was not found.", true);
         }
 
-        CommandResult selection = await RunCapturedAsync(
-            "pac", ["auth", "select", "--name", DataverseProfileName(profile, environment)], profile, cancellationToken);
+        CommandResult selection = await SelectDataverseAsync(profile, environment, cancellationToken);
         if (!selection.Succeeded)
         {
-            return Status(ConnectionKind.Dataverse, environment, ConnectionState.NeedsSignIn, SafeError(selection));
+            return Status(ConnectionKind.Dataverse, environment, ConnectionState.NeedsSignIn, SafeError(selection), true);
         }
 
         CommandResult result = await RunCapturedAsync("pac", ["auth", "who"], profile, cancellationToken);
@@ -247,7 +320,7 @@ public sealed class CliOrchestrator(ProfileStore store)
     {
         if (!IsAvailable("az"))
         {
-            return Status(ConnectionKind.LogAnalytics, workspace, ConnectionState.Unavailable, "Azure CLI was not found.");
+            return Status(ConnectionKind.LogAnalytics, workspace, ConnectionState.Unavailable, "Azure CLI was not found.", true);
         }
 
         string url = $"https://api.loganalytics.io/v1/workspaces/{Uri.EscapeDataString(workspace)}/query?query=print%20CloudContextProbe%3D1";
@@ -316,8 +389,8 @@ public sealed class CliOrchestrator(ProfileStore store)
         if (isCommandScript)
         {
             startInfo.ArgumentList.Add("/d");
-            startInfo.ArgumentList.Add("/s");
             startInfo.ArgumentList.Add("/c");
+            startInfo.ArgumentList.Add("call");
             startInfo.ArgumentList.Add(resolved);
         }
         foreach (string variable in new[]
@@ -370,11 +443,16 @@ public sealed class CliOrchestrator(ProfileStore store)
 
     private static ConnectionStatus FromCommand(ConnectionKind kind, string target, CommandResult result) =>
         result.Succeeded
-            ? Status(kind, target, ConnectionState.Connected, "Access verified.")
-            : Status(kind, target, ConnectionState.AccessDenied, SafeError(result));
+            ? Status(kind, target, ConnectionState.Connected, "Access verified.", true)
+            : Status(kind, target, ConnectionState.AccessDenied, SafeError(result), true);
 
-    private static ConnectionStatus Status(ConnectionKind kind, string target, ConnectionState state, string detail) =>
-        new(kind, target, state, detail);
+    private static ConnectionStatus Status(
+        ConnectionKind kind,
+        string target,
+        ConnectionState state,
+        string detail,
+        bool canRemove = false) =>
+        new(kind, target, state, detail, canRemove);
 
     private static string SafeError(CommandResult result)
     {

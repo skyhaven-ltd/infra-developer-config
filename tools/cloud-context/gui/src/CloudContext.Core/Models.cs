@@ -19,6 +19,9 @@ public sealed class CloudProfile
     [JsonPropertyName("displayName")]
     public string DisplayName { get; set; } = string.Empty;
 
+    [JsonPropertyName("folder")]
+    public string Folder { get; set; } = string.Empty;
+
     [JsonPropertyName("identity")]
     public CloudIdentity Identity { get; set; } = new();
 
@@ -115,7 +118,14 @@ public sealed record ConnectionStatus(
     ConnectionKind Kind,
     string Target,
     ConnectionState State,
-    string Detail);
+    string Detail,
+    bool CanRemove = false);
+
+public sealed record ConnectionInput(
+    ConnectionKind Kind,
+    string Target,
+    string Host = "",
+    string User = "");
 
 public sealed record CommandResult(int ExitCode, string StandardOutput, string StandardError)
 {

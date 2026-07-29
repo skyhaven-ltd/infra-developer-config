@@ -5,7 +5,7 @@ argument-hint: "What will the next session be used for?"
 disable-model-invocation: true
 ---
 
-Write a handoff document summarising the current conversation so a fresh agent can continue the work. Save to the temporary directory of the user's OS - not the current workspace.
+Write a handoff document summarising the current conversation so a fresh agent can continue the work. Resolve the root of the repository containing the current working directory and save the document there as `HANDOFF.md`. Use `git rev-parse --show-toplevel` when Git is available; otherwise use the current working directory. If the user explicitly requests another path or filename, follow the user's request.
 
 Include a "suggested skills" section in the document, which suggests skills that the agent should invoke.
 

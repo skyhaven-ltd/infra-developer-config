@@ -12,6 +12,7 @@ public partial class ProfileEditorWindow : Window
         Profile = profile ?? new CloudProfile();
         NameBox.Text = Profile.Name;
         DisplayNameBox.Text = Profile.DisplayName;
+        FolderBox.Text = Profile.Folder;
         UsernameBox.Text = Profile.Identity.Username;
         TenantBox.Text = Profile.Identity.TenantId;
         SubscriptionsBox.Text = Lines(Profile.Connections.Azure?.SubscriptionIds);
@@ -21,6 +22,18 @@ public partial class ProfileEditorWindow : Window
         AzureDevOpsBox.Text = Lines(Profile.Connections.AzureDevOps?.Organisations);
         DataverseBox.Text = Lines(Profile.Connections.Dataverse?.Environments);
         LogAnalyticsBox.Text = Lines(Profile.Connections.LogAnalytics?.Workspaces);
+        SetConnectionVisibility(SubscriptionsLabel, SubscriptionsBox, Profile.Connections.Azure is not null);
+        SetConnectionVisibility(GitHubLabel, GitHubFields, Profile.Connections.GitHub is not null);
+        SetConnectionVisibility(AzureDevOpsLabel, AzureDevOpsBox, Profile.Connections.AzureDevOps is not null);
+        SetConnectionVisibility(DataverseLabel, DataverseBox, Profile.Connections.Dataverse is not null);
+        SetConnectionVisibility(LogAnalyticsLabel, LogAnalyticsBox, Profile.Connections.LogAnalytics is not null);
+        ConnectionsHeading.Visibility = Profile.Connections.Azure is not null ||
+                                        Profile.Connections.GitHub is not null ||
+                                        Profile.Connections.AzureDevOps is not null ||
+                                        Profile.Connections.Dataverse is not null ||
+                                        Profile.Connections.LogAnalytics is not null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     public CloudProfile Profile { get; private set; }
@@ -40,6 +53,7 @@ public partial class ProfileEditorWindow : Window
         {
             Name = NameBox.Text.Trim(),
             DisplayName = DisplayNameBox.Text.Trim(),
+            Folder = FolderBox.Text.Trim(),
             Identity = new CloudIdentity
             {
                 Username = UsernameBox.Text.Trim(),
@@ -78,4 +92,11 @@ public partial class ProfileEditorWindow : Window
         .ToList();
 
     private static string Lines(IEnumerable<string>? values) => string.Join(Environment.NewLine, values ?? []);
+
+    private static void SetConnectionVisibility(UIElement label, UIElement field, bool visible)
+    {
+        Visibility visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        label.Visibility = visibility;
+        field.Visibility = visibility;
+    }
 }

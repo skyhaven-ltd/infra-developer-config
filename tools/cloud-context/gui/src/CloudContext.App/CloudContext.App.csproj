@@ -6,11 +6,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <AssemblyName>CloudContext</AssemblyName>
+    <AssemblyName>CloudConnect</AssemblyName>
     <RootNamespace>CloudContext.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\cloud-connect.ico</ApplicationIcon>
+    <AssemblyTitle>Cloud Connect</AssemblyTitle>
+    <Product>Cloud Connect</Product>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../CloudContext.Core/CloudContext.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\cloud-connect.ico" />
+    <Resource Include="Assets\cloud-connect.png" />
   </ItemGroup>
 </Project>

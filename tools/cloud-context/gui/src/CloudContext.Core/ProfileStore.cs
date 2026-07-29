@@ -23,6 +23,8 @@ public sealed partial class ProfileStore
 
     public string FilePath => Path.Combine(Root, "profiles.json");
 
+    public string ActiveProfilePath => Path.Combine(Root, "active-profile");
+
     public CloudProfileStore Load()
     {
         if (!File.Exists(FilePath))
@@ -52,6 +54,44 @@ public sealed partial class ProfileStore
         File.Move(temporaryPath, FilePath, true);
     }
 
+    public string? GetActiveProfileName()
+    {
+        if (!File.Exists(ActiveProfilePath))
+        {
+            return null;
+        }
+
+        string name = File.ReadAllText(ActiveProfilePath).Trim();
+        return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
+
+    public void SetActiveProfile(string name)
+    {
+        CloudProfile profile = Load().Profiles.FirstOrDefault(profile =>
+            profile.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException($"Cloud profile '{name}' does not exist.");
+        Directory.CreateDirectory(Root);
+        string temporaryPath = ActiveProfilePath + ".tmp";
+        File.WriteAllText(temporaryPath, profile.Name + Environment.NewLine);
+        File.Move(temporaryPath, ActiveProfilePath, true);
+    }
+
+    public void ClearActiveProfile()
+    {
+        if (File.Exists(ActiveProfilePath))
+        {
+            File.Delete(ActiveProfilePath);
+        }
+    }
+
+    public void UpdateActiveProfileName(string previousName, string currentName)
+    {
+        if (GetActiveProfileName()?.Equals(previousName, StringComparison.OrdinalIgnoreCase) == true)
+        {
+            SetActiveProfile(currentName);
+        }
+    }
+
     public static void ValidateProfile(CloudProfile profile)
     {
         if (profile.Identity is null || profile.Connections is null)
@@ -64,6 +104,8 @@ public sealed partial class ProfileStore
             throw new InvalidDataException(
                 "Profile names must start with a letter or number, contain only letters, numbers, '.', '_' or '-', and be at most 64 characters.");
         }
+
+        NormalizeFolder(profile.Folder);
 
         if (string.IsNullOrWhiteSpace(profile.Identity.TenantId) &&
             (profile.Connections.Azure is not null ||
@@ -95,6 +137,7 @@ public sealed partial class ProfileStore
 
         foreach (CloudProfile profile in store.Profiles)
         {
+            profile.Folder = NormalizeFolder(profile.Folder);
             profile.Connections.Azure?.SubscriptionIds ??= [];
             profile.Connections.GitHub?.Organisations ??= [];
             profile.Connections.AzureDevOps?.Organisations ??= [];
@@ -156,6 +199,26 @@ public sealed partial class ProfileStore
 
     private static string Text(JsonNode item, string property, string fallback = "") =>
         item[property]?.GetValue<string>() ?? fallback;
+
+    public static string NormalizeFolder(string? folder)
+    {
+        string value = (folder ?? string.Empty).Trim().Replace('\\', '/').Trim('/');
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        string[] segments = value.Split('/', StringSplitOptions.TrimEntries);
+        if (segments.Any(segment => string.IsNullOrWhiteSpace(segment) ||
+                                    segment is "." or ".." ||
+                                    segment.Any(char.IsControl)))
+        {
+            throw new InvalidDataException(
+                "Folder paths must contain named levels separated by '/', without empty, '.' or '..' levels.");
+        }
+
+        return string.Join('/', segments);
+    }
 
     private static void RejectEmpty(List<string>? values, string label)
     {
