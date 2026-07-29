@@ -1,6 +1,7 @@
 ---
 name: process-inbox
 description: Process the Obsidian vault inbox (00 - Inbox) into permanent notes following the vault schema. Use when the user asks to process the inbox, triage captures, or file inbox notes.
+disable-model-invocation: true
 ---
 
 # Process Inbox

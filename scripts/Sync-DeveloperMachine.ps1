@@ -55,6 +55,9 @@
     Skip the organisation clone step (pull and install only). Useful offline
     or when gh is unavailable.
 
+.PARAMETER MaxParallel
+    Maximum number of repositories pulled concurrently. Defaults to 4.
+
 .EXAMPLE
     .\Sync-DeveloperMachine.ps1
 
@@ -73,7 +76,9 @@ param (
     [switch]$NoScheduledTask,
     [string]$TaskName = "Sync Developer Machine",
     [string]$LogPath,
-    [switch]$SkipClone
+    [switch]$SkipClone,
+    [ValidateRange(1, 32)]
+    [int]$MaxParallel = 4
 )
 
 Set-StrictMode -Version Latest
@@ -164,7 +169,10 @@ function Register-UserLogonTask {
         [string]$ResolvedLogPath,
 
         [Parameter(Mandatory = $true)]
-        [string]$Name
+        [string]$Name,
+
+        [Parameter(Mandatory = $true)]
+        [int]$ResolvedMaxParallel
     )
 
     $powerShellPath = Get-PowerShellExecutablePath
@@ -182,6 +190,8 @@ function Register-UserLogonTask {
         (ConvertTo-TaskArgument -Value $ResolvedCloneRoot)
         "-LogPath"
         (ConvertTo-TaskArgument -Value $ResolvedLogPath)
+        "-MaxParallel"
+        $ResolvedMaxParallel
     )
 
     $action = New-ScheduledTaskAction -Execute $powerShellPath -Argument ($arguments -join " ")
@@ -268,7 +278,8 @@ if ($NoScheduledTask) {
         -ResolvedRepositoriesRoot $repositoriesRootPath `
         -ResolvedCloneRoot $CloneRoot `
         -ResolvedLogPath $LogPath `
-        -Name $TaskName
+        -Name $TaskName `
+        -ResolvedMaxParallel $MaxParallel
 
     if ($taskRegistered) {
         Write-Log "Scheduled task ensured: $TaskName"
@@ -327,6 +338,7 @@ Write-Log "Pulling repositories under: $repositoriesRootPath"
 $pullFailed = $false
 $updateArguments = @{
     RepositoriesRoot = $repositoriesRootPath
+    MaxParallel = $MaxParallel
 }
 if (-not $SkipClone) {
     $updateArguments.ManagedCloneRoot = $CloneRoot

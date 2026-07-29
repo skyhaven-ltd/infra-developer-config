@@ -1,6 +1,7 @@
 ---
 name: create-pr
 description: Create a pull request for the current branch on GitHub or Azure DevOps
+disable-model-invocation: true
 ---
 
 Create a pull request for the current branch. The helper detects whether the repository is hosted on **GitHub** (via `gh`) or **Azure DevOps** (via `az`) from its `origin` remote and dispatches to the right backend. Use the bundled Python helper for deterministic VCS detection, branch, default branch, existing PR, shared template, and diff-stat checks. Use the LLM only for judgement: drafting the concise PR title/body from the diff, confirming the VCS when it cannot be inferred, and asking when the branch prefix is unclear.

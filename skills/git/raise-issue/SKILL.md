@@ -1,6 +1,7 @@
 ---
 name: raise-issue
 description: Raise a classified GitHub issue (bug, feature, or task) with the right template, native issue type, and project board link
+disable-model-invocation: true
 ---
 
 Raise a GitHub issue. The LLM classifies the user's request as a **bug**, **feature**, or **task**, decides whether it should be broken into **sub-issues**, and drafts meaningful prose. The bundled Python helper does the deterministic work: loading the matching shared template, creating the issue, setting the native (root-level) GitHub issue type, adding it to the Sky Haven Project Board, and linking any sub-issues.
