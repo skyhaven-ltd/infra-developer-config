@@ -52,7 +52,7 @@ The body is the instruction prompt used by Claude or Codex when the skill is inv
 | ----------------- | -------------------------------------------------- |
 | `create-pr`       | Create a pull request (GitHub or Azure DevOps)     |
 | `git-commit-push` | Stage, commit, and push with safety checks         |
-| `raise-issue`     | Raise a classified GitHub issue (bug/feature/task) |
+| `raise-issue`     | Raise a GitHub issue or Azure DevOps work item through Backlog |
 
 **tools/**
 
@@ -173,4 +173,3 @@ These conventions apply across all IaC and scripting work in connected repositor
 - **Terraform**: 2-space indent, explicit provider versions, use `for_each` instead of `count` for resource toggling
 - **Shell**: Bash with `set -euo pipefail`; quote all variable expansions; prefer idempotent operations
 - **YAML / JSON**: 2-space indent, no trailing whitespace
-

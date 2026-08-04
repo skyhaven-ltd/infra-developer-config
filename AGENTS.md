@@ -74,7 +74,7 @@ Naming schema: `{verb}-{subject}[-{qualifier}]`
 | Skill         | Purpose                                            |
 | ------------- | -------------------------------------------------- |
 | `create-pr`   | Create a pull request (GitHub or Azure DevOps)     |
-| `raise-issue` | Raise a classified GitHub issue (bug/feature/task) |
+| `raise-issue` | Raise a GitHub issue or Azure DevOps work item through Backlog |
 
 > Repository creation and configuration are handled by Terraform; the former `config-repo-gh` / `config-repo-ado` skills have been decommissioned.
 
@@ -184,4 +184,3 @@ These conventions apply across all IaC and scripting work in connected repositor
 - **Terraform**: 2-space indent, explicit provider versions, use `for_each` instead of `count` for resource toggling
 - **Shell**: Bash with `set -euo pipefail`; quote all variable expansions; prefer idempotent operations
 - **YAML / JSON**: 2-space indent, no trailing whitespace
-
