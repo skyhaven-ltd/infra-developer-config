@@ -97,7 +97,7 @@ commands directly:
 | --------------------------------------------------- | ----------------- |
 | Commit and push changes                             | `git-commit-push` |
 | Create a pull request                               | `create-pr`       |
-| Raise a GitHub issue or other work item             | `raise-issue`     |
+| Raise a GitHub issue or Azure DevOps work item      | `raise-issue`     |
 
 Invoke the matching installed skill when the user names it or asks for the
 operation. Read-only Git inspection (`git status`, `git log`, `git diff`,
