@@ -967,7 +967,6 @@ Merge-ClaudeSettings "$Repo\claude\settings.json" "$claude\settings.json"
 foreach ($profileDirectory in $extraClaudeProfileDirectories) {
     Merge-ClaudeSettings "$Repo\claude\settings.json" "$profileDirectory\settings.json"
 }
-New-Symlink "$claude\hooks\knowledge-capture-stop.ps1" "$Repo\claude\hooks\knowledge-capture-stop.ps1"
 
 # -- Codex -----------------------------------------------------------------
 

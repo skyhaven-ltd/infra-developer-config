@@ -40,8 +40,6 @@ This:
   from the environment,
 - merges the `[mcp_servers.knowledge]` section into `~\.codex\config.toml`
   (Codex reads the token via `bearer_token_env_var`),
-- installs the `Stop` hook that reminds Claude once per session to store
-  durable knowledge before finishing.
 
 Verify:
 
@@ -65,13 +63,12 @@ Scopes are exact strings shared by every agent on every machine:
 
 ## Capture and recall model
 
-- **Recall** happens at the start of any non-trivial task, scoped to the
-  current repository plus `global`. Enforced by `system/SYSTEM.md` and the
-  server's own instructions.
+- **Recall** happens only when earlier decisions, conventions, failures, or
+  machine facts could materially affect the task. Repository and `global`
+  scopes keep results relevant; machine-local tasks add the machine scope.
 - **Capture** happens at the end of a session that produced durable,
-  non-obvious, reusable knowledge. The Claude `Stop` hook
-  (`claude/hooks/knowledge-capture-stop.ps1`) injects a one-time reminder per
-  session; Codex relies on the shared instructions alone.
+  non-obvious, reusable knowledge. Shared instructions cover both Claude and
+  Codex without forcing an extra completion turn.
 - **Correction**: memories proven wrong are marked `stale` or `superseded`
   with evidence via `memory_mark`; the store retains history.
 - Deduplication, idempotency keys, and similarity conflicts are handled
