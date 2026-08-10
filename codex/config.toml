@@ -5,10 +5,6 @@
 model = "gpt-5.5"
 model_reasoning_effort = "medium"
 
-# Play a per-user Windows sound when a Codex turn completes. Codex appends a
-# JSON event payload, which the shared notifier accepts and safely ignores.
-notify = ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "%USERPROFILE%\\.local\\bin\\agent-notify.ps1", "-Source", "Codex", "-Event", "Complete"]
-
 # Permissions — mirrors Claude Code's broad allow list
 approval_policy = "never"
 sandbox_mode = "danger-full-access"

@@ -46,8 +46,8 @@
 
 .PARAMETER KnowledgeMcpUrl
     MCP endpoint of the knowledge server. Registered for Claude Code in
-    ~/.claude.json (user scope, via a headers helper that reads the token from
-    the environment) and for Codex in ~/.codex/config.toml.
+    ~/.claude.json (user scope, with an environment-expanded authorization
+    header) and for Codex in ~/.codex/config.toml.
 
 .EXAMPLE
     .\Install-DeveloperConfig.ps1
@@ -436,10 +436,18 @@ function Merge-ClaudeSettings {
     }
 
     $merged = ConvertTo-OrderedJsonObject $destinationSettings
-    foreach ($propertyName in @("permissions", "enabledPlugins", "extraKnownMarketplaces", "hooks")) {
+    foreach ($propertyName in @("permissions", "enabledPlugins", "extraKnownMarketplaces")) {
         if ($sourceSettings.PSObject.Properties.Name -contains $propertyName) {
             $merged[$propertyName] = $sourceSettings.$propertyName
         }
+    }
+
+    # Hooks are fully managed by this repository. Remove previously installed
+    # hooks when the shared settings no longer define them.
+    if ($sourceSettings.PSObject.Properties.Name -contains "hooks") {
+        $merged["hooks"] = $sourceSettings.hooks
+    } else {
+        $merged.Remove("hooks") | Out-Null
     }
 
     # Hook commands are not run through cmd, so %USERPROFILE% is never
@@ -685,6 +693,10 @@ function Merge-CodexConfig {
                 $replacementLine = $replacementLine.Replace("%USERPROFILE%", $escapedProfile)
             }
             $lines = @(Set-TomlScalarLine -Lines $lines -QualifiedKey $qualifiedKey -ReplacementLine $replacementLine)
+        } elseif ($qualifiedKey -eq "notify") {
+            # Notifications are managed by this repository. Remove the old
+            # notifier command when it is no longer present in shared config.
+            $lines = @(Remove-TomlScalarLine -Lines $lines -QualifiedKey $qualifiedKey)
         }
     }
 
@@ -736,7 +748,7 @@ function Set-ObsidianVaultPath {
 }
 
 function Register-KnowledgeMcpServer {
-    param([string]$ClaudeConfigPath, [string]$Url, [string]$HelperDestination)
+    param([string]$ClaudeConfigPath, [string]$Url)
 
     # Register the server at user scope in the given .claude.json while
     # preserving all other configuration in that file. The file can contain
@@ -752,9 +764,11 @@ function Register-KnowledgeMcpServer {
     }
 
     $server = [ordered]@{
-        type          = "http"
-        url           = $Url
-        headersHelper = $HelperDestination
+        type    = "http"
+        url     = $Url
+        headers = [ordered]@{
+            Authorization = 'Bearer ${KNOWLEDGE_MCP_TOKEN}'
+        }
     }
     $desiredJson = $server | ConvertTo-Json -Compress
     if ($claudeConfig["mcpServers"].ContainsKey("knowledge")) {
@@ -775,19 +789,7 @@ function Register-KnowledgeMcpServer {
 }
 
 function Install-KnowledgeMcp {
-    param([string]$RepoPath, [string]$Url, [string]$Token, [string[]]$ClaudeConfigPaths)
-
-    # Headers helper: emits the Authorization header from the environment so
-    # the bearer token is never persisted in ~/.claude.json.
-    $helperSource = Join-Path $RepoPath "tools\knowledge-mcp\knowledge-mcp-headers.cmd"
-    if (-not (Test-Path -LiteralPath $helperSource -PathType Leaf)) {
-        throw "knowledge MCP headers helper not found: $helperSource"
-    }
-    $binDirectory = Join-Path $env:USERPROFILE ".local\bin"
-    New-Item -ItemType Directory -Path $binDirectory -Force | Out-Null
-    $helperDestination = Join-Path $binDirectory "knowledge-mcp-headers.cmd"
-    Copy-Item -LiteralPath $helperSource -Destination $helperDestination -Force
-    Write-Host "  [copy]    $helperDestination <- $helperSource" -ForegroundColor Green
+    param([string]$Url, [string]$Token, [string[]]$ClaudeConfigPaths)
 
     $variableName = "KNOWLEDGE_MCP_TOKEN"
     if ($Token) {
@@ -804,7 +806,7 @@ function Install-KnowledgeMcp {
         return
     }
     foreach ($claudeConfigPath in $ClaudeConfigPaths) {
-        Register-KnowledgeMcpServer -ClaudeConfigPath $claudeConfigPath -Url $Url -HelperDestination $helperDestination
+        Register-KnowledgeMcpServer -ClaudeConfigPath $claudeConfigPath -Url $Url
     }
 }
 
@@ -943,14 +945,6 @@ Install-Skills "$claude\skills" $repoSkills "Claude" $skills
 Install-Skills "$codex\skills" $repoSkills "Codex" $skills
 Remove-LegacyAgentsSkillsJunction "$env:USERPROFILE\.agents\skills" "$Repo\skills"
 
-# -- Shared agent notifier --------------------------------------------------
-
-$notifierSource = "$Repo\tools\agent-notifier\agent-notify.ps1"
-$notifierDestination = "$env:USERPROFILE\.local\bin\agent-notify.ps1"
-New-Item -ItemType Directory -Path (Split-Path $notifierDestination) -Force | Out-Null
-Copy-Item -LiteralPath $notifierSource -Destination $notifierDestination -Force
-Write-Host "  [copy]    $notifierDestination <- $notifierSource" -ForegroundColor Green
-
 # -- Claude ----------------------------------------------------------------
 
 Write-Host "`nClaude" -ForegroundColor Cyan
@@ -980,7 +974,7 @@ Merge-CodexConfig "$Repo\codex\config.toml" "$codex\config.toml"
 
 Write-Host "`nKnowledge MCP" -ForegroundColor Cyan
 $claudeConfigPaths = @("$env:USERPROFILE\.claude.json") + ($extraClaudeProfileDirectories | ForEach-Object { "$_\.claude.json" })
-Install-KnowledgeMcp $Repo $KnowledgeMcpUrl $KnowledgeMcpToken $claudeConfigPaths
+Install-KnowledgeMcp $KnowledgeMcpUrl $KnowledgeMcpToken $claudeConfigPaths
 
 # -- Obsidian ----------------------------------------------------------------
 

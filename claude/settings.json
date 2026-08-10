@@ -28,28 +28,6 @@
     ],
     "deny": []
   },
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%USERPROFILE%\\.local\\bin\\agent-notify.ps1\" -Source \"Claude Code\" -Event Complete"
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%USERPROFILE%\\.local\\bin\\agent-notify.ps1\" -Source \"Claude Code\" -Event Permission"
-          }
-        ]
-      }
-    ]
-  },
   "enabledPlugins": {
     "caveman@caveman": true,
     "frontend-design@claude-plugins-official": true
