@@ -1,4 +1,7 @@
 interface:
   display_name: "Pythonize Skill"
   short_description: "Refactor skills to offload deterministic work to Python scripts."
-  default_prompt: "Refactor this target skill into a Python-backed workflow where scripts handle deterministic work and the LLM handles judgement."
+  default_prompt: "Use $pythonize-skill to refactor this target skill into a Python-backed workflow."
+
+policy:
+  allow_implicit_invocation: false

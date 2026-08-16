@@ -1,0 +1,4 @@
+interface:
+  display_name: "Voss Negotiation"
+  short_description: "Context-aware negotiation message drafting."
+  default_prompt: "Use $negotiate-voss to help me draft a negotiation response."

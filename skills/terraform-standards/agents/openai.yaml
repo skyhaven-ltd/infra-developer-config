@@ -1,0 +1,7 @@
+interface:
+  display_name: "Terraform Standards"
+  short_description: "Terraform engineering standards."
+  default_prompt: "Use $terraform-standards to review Terraform against the house standards."
+
+policy:
+  allow_implicit_invocation: false

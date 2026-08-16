@@ -1,0 +1,7 @@
+interface:
+  display_name: "Process Inbox"
+  short_description: "File Obsidian inbox captures into notes."
+  default_prompt: "Use $process-inbox to process the Obsidian vault inbox."
+
+policy:
+  allow_implicit_invocation: false

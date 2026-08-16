@@ -1,4 +1,7 @@
 interface:
   display_name: "Create Blog Post"
   short_description: "Draft, validate, and build CVEngine blog posts."
-  default_prompt: "Create a new CVEngine blog post."
+  default_prompt: "Use $create-blog-post to create a new CVEngine blog post."
+
+policy:
+  allow_implicit_invocation: false

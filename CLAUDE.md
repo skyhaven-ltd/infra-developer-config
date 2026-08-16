@@ -32,9 +32,11 @@ Each skill lives in `skills/<category>/<name>/SKILL.md` (categories: `engineerin
 ---
 name: skill-name
 description: shown in the skill picker and used for model auto-invocation matching
-disable-model-invocation: true # optional - hides the skill from model auto-invocation; user slash-command only
+disable-model-invocation: true # optional - Claude slash-command only
 ---
 ```
+
+For Codex, use `agents/openai.yaml` with `policy.allow_implicit_invocation: false` to keep a skill available for explicit use while preventing automatic chat invocation.
 
 The body is the instruction prompt used by Claude or Codex when the skill is invoked. Skills may reference CLI tools (`gh`, `az`, `git`) and are expected to be self-contained instructions.
 

@@ -88,7 +88,11 @@ Use the repository directory name for `<name>` and the output of `hostname` for 
 
 The Obsidian vault is the human knowledge layer, not agent memory. Do not use vault notes as a substitute for `memory_upsert`, and do not bulk-read the vault into context. Knowledge flows from the MCP store into the vault through the `distill-knowledge` skill.
 
-## 6. Git and work-item workflow
+## 6. Skill invocation boundaries
+
+Skills are not recursive. When operating under a skill's instructions, do not invoke another skill just because the skill text, referenced files, or generated work resembles that other skill's trigger. Use another skill only when the original user request explicitly named that skill or when the platform already injected it for the current turn.
+
+## 7. Git and work-item workflow
 
 Always use these skills for these operations; never use the underlying mutating commands directly:
 

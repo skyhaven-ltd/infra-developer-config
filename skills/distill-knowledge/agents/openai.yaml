@@ -1,0 +1,7 @@
+interface:
+  display_name: "Distill Knowledge"
+  short_description: "Promote durable memories into vault notes."
+  default_prompt: "Use $distill-knowledge to review and distill the memory store."
+
+policy:
+  allow_implicit_invocation: false

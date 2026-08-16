@@ -1,0 +1,4 @@
+interface:
+  display_name: "Buy For Life"
+  short_description: "UK durable product research with value tradeoffs."
+  default_prompt: "Use $buy-for-life to help me choose a durable product to buy in the UK."
