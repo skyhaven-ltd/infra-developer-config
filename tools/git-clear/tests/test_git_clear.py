@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 MODULE_PATH = Path(__file__).parents[1] / "git-clear.py"
@@ -23,6 +24,57 @@ def git(root: Path, *args: str) -> str:
 
 
 class GitClearTests(unittest.TestCase):
+    def test_parses_azure_devops_repository_url(self) -> None:
+        remote = subprocess.CompletedProcess(
+            [], 0,
+            stdout="https://user@dev.azure.com/example/Project%20Name/_git/example-repo\n",
+        )
+        with patch.object(git_clear, "run_git", return_value=remote):
+            repository = git_clear.azure_devops_repository(Path("."))
+
+        self.assertEqual(
+            repository,
+            ("https://dev.azure.com/example", "Project Name", "example-repo"),
+        )
+
+    def test_detects_azure_devops_squash_merge_by_exact_source_tip(self) -> None:
+        remote = subprocess.CompletedProcess(
+            [], 0,
+            stdout="https://dev.azure.com/example/project/_git/repository\n",
+        )
+        head = subprocess.CompletedProcess([], 0, stdout="abc123\n")
+        prs = subprocess.CompletedProcess(
+            [], 0,
+            stdout='[{"lastMergeSourceCommit": {"commitId": "abc123"}}]',
+        )
+        with (
+            patch.object(git_clear, "run_git", side_effect=[remote, head]),
+            patch.object(git_clear.shutil, "which", return_value="az"),
+            patch.object(git_clear.subprocess, "run", return_value=prs),
+        ):
+            merged = git_clear.is_merged_azure_devops_pr_head(Path("."), "patch/example")
+
+        self.assertTrue(merged)
+
+    def test_rejects_azure_devops_pr_with_different_source_tip(self) -> None:
+        remote = subprocess.CompletedProcess(
+            [], 0,
+            stdout="https://dev.azure.com/example/project/_git/repository\n",
+        )
+        head = subprocess.CompletedProcess([], 0, stdout="abc123\n")
+        prs = subprocess.CompletedProcess(
+            [], 0,
+            stdout='[{"lastMergeSourceCommit": {"commitId": "different"}}]',
+        )
+        with (
+            patch.object(git_clear, "run_git", side_effect=[remote, head]),
+            patch.object(git_clear.shutil, "which", return_value="az"),
+            patch.object(git_clear.subprocess, "run", return_value=prs),
+        ):
+            merged = git_clear.is_merged_azure_devops_pr_head(Path("."), "patch/example")
+
+        self.assertFalse(merged)
+
     def test_deletes_patch_equivalent_branch_after_history_rewrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -11,6 +11,7 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 
 class GitClearError(RuntimeError):
@@ -111,6 +112,54 @@ def is_merged_github_pr_head(root: Path, branch: str) -> bool:
         return False
 
 
+def azure_devops_repository(root: Path) -> tuple[str, str, str] | None:
+    result = run_git(root, "remote", "get-url", "origin", check=False)
+    if result.returncode != 0:
+        return None
+    parsed = urlparse(result.stdout.strip())
+    parts = [unquote(part) for part in parsed.path.split("/") if part]
+    if parsed.hostname != "dev.azure.com" or len(parts) != 4 or parts[2] != "_git":
+        return None
+    organization, project, _, repository = parts
+    return f"https://dev.azure.com/{organization}", project, repository.removesuffix(".git")
+
+
+def is_merged_azure_devops_pr_head(root: Path, branch: str) -> bool:
+    """Best-effort check for a completed PR whose recorded source is this commit."""
+    az = shutil.which("az")
+    repository = azure_devops_repository(root)
+    if not az or not repository:
+        return False
+    organization, project, repository_name = repository
+    head = run_git(root, "rev-parse", branch).stdout.strip()
+    result = subprocess.run(
+        [
+            az, "repos", "pr", "list", "--organization", organization,
+            "--project", project, "--repository", repository_name,
+            "--source-branch", branch, "--status", "completed", "--top", "20",
+            "--output", "json",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.returncode != 0:
+        return False
+    try:
+        return any(
+            item.get("lastMergeSourceCommit", {}).get("commitId") == head
+            for item in json.loads(result.stdout)
+        )
+    except (AttributeError, json.JSONDecodeError, TypeError):
+        return False
+
+
+def is_merged_pr_head(root: Path, branch: str) -> bool:
+    return is_merged_github_pr_head(root, branch) or is_merged_azure_devops_pr_head(root, branch)
+
+
 @dataclass
 class RetainedBranch:
     name: str
@@ -168,10 +217,10 @@ def discover(root: Path, fetch: bool = True) -> Plan:
             if not has_unique_patch(root, branch, f"origin/{default}"):
                 deletable.append(branch)
                 continue
-            # Multi-commit PRs squash to a different patch shape. GitHub keeps
-            # the original head SHA, which lets us confirm the exact local tip
-            # was merged without relying on a potentially reused branch name.
-            if is_merged_github_pr_head(root, branch):
+            # Multi-commit PRs squash to a different patch shape. The hosting
+            # provider keeps the original head SHA, which lets us confirm the
+            # exact tip without relying on a potentially reused branch name.
+            if is_merged_pr_head(root, branch):
                 deletable.append(branch)
                 continue
             local_only = lines(run_git(root, "rev-list", branch, "--not", f"origin/{default}"))
