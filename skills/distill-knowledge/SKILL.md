@@ -1,7 +1,6 @@
 ---
 name: distill-knowledge
 description: Periodic maintenance pass over the knowledge MCP store - promote high-value durable memories into the Obsidian vault as human-readable notes, flag stale or contradictory memories, and write a dated report. Use when asked to distill knowledge, sync agent memory to the vault, review the memory store, or roughly monthly as memory maintenance.
-disable-model-invocation: true
 ---
 
 # Distill knowledge

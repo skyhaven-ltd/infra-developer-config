@@ -2,6 +2,3 @@ interface:
   display_name: "Generate README"
   short_description: "Generate a brief README from repository code."
   default_prompt: "Use $generate-readme to generate a brief project README."
-
-policy:
-  allow_implicit_invocation: false

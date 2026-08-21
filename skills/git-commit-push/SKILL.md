@@ -1,7 +1,6 @@
 ---
 name: git-commit-push
 description: Stage, commit, and push changes to origin
-disable-model-invocation: true
 ---
 
 You have EXPLICIT authorisation to stage, commit, and push.

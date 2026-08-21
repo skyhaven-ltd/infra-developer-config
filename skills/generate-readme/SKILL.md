@@ -1,7 +1,6 @@
 ---
 name: generate-readme
 description: Generate a brief project README from repo code
-disable-model-invocation: true
 ---
 
 Use the bundled Python helper for deterministic repository inventory. Use the LLM only for judgement: understanding what the project does and writing concise factual prose.

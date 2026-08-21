@@ -2,6 +2,3 @@ interface:
   display_name: "Commit And Push"
   short_description: "Stage, commit, and push changes safely."
   default_prompt: "Use $git-commit-push to stage, commit, and push my changes."
-
-policy:
-  allow_implicit_invocation: false

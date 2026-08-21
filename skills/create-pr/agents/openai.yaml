@@ -2,6 +2,3 @@ interface:
   display_name: "Create PR"
   short_description: "Create GitHub or Azure DevOps pull requests."
   default_prompt: "Use $create-pr to create a pull request for the current branch."
-
-policy:
-  allow_implicit_invocation: false
