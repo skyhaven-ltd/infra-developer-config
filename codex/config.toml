@@ -1,5 +1,5 @@
 # Codex CLI configuration
-# Symlinked from ~/.codex/config.toml
+# Merged into ~/.codex/config.toml (or CODEX_HOME); existing local model choices are preserved
 # Docs: https://developers.openai.com/codex/config-reference
 
 model = "gpt-5.5"

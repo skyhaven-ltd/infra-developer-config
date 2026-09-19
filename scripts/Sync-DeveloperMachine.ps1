@@ -77,6 +77,7 @@ param (
     [string]$TaskName = "Sync Developer Machine",
     [string]$LogPath,
     [switch]$SkipClone,
+    [switch]$CheckHealth,
     [ValidateRange(1, 32)]
     [int]$MaxParallel = 4
 )
@@ -107,6 +108,8 @@ function ConvertTo-TaskArgument {
 }
 
 function Get-PowerShellExecutablePath {
+    $pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+    if ($pwsh) { return $pwsh.Source }
     $currentPowerShell = Join-Path -Path $PSHOME -ChildPath "powershell.exe"
     if (Test-Path -LiteralPath $currentPowerShell -PathType Leaf) {
         return $currentPowerShell
@@ -366,6 +369,11 @@ if ($failedClones.Count -gt 0) {
     }
 }
 
-if (($failedClones.Count -gt 0) -or $pullFailed) {
+$healthFailed = $false
+if ($CheckHealth) {
+    & (Join-Path $scriptsDirectory "Test-DeveloperMachine.ps1") -Repo $repoRoot
+    $healthFailed = $LASTEXITCODE -ne 0
+}
+if (($failedClones.Count -gt 0) -or $pullFailed -or $healthFailed) {
     exit 1
 }
