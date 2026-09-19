@@ -18,6 +18,7 @@ Tracked in version control (enforced by `.gitignore`):
 | `codex/config.toml`                   | Codex CLI           | Model, reasoning effort, options                                                               |
 | `scripts/Install-DeveloperConfig.ps1` | All                 | One-shot link creation for a new Windows machine; can install a per-user logon task for itself |
 | `scripts/Update-GitRepositories.ps1`  | Git                 | Pulls all repositories under a configurable root; can install a per-user logon task for itself |
+| `scripts/Test-DeveloperMachine.ps1` | All | Read-only CLI, authentication, config, skill and MCP checks |
 | `docs/`                               | â€”                   | Per-tool setup documentation                                                                   |
 
 Everything else in each tool's config directory (sessions, history, cache,
@@ -41,62 +42,18 @@ The body is the instruction prompt used by Claude or Codex when the skill is inv
 
 ### Available Skills
 
-Naming schema: `{verb}-{subject}[-{qualifier}]`
-
-**Review**
-
-| Skill                  | Purpose                                                   |
-| ---------------------- | --------------------------------------------------------- |
-| `review-terraform`     | Terraform code and CI/CD pipeline (minimalist lens)       |
-| `review-gha-pipelines` | GitHub Actions workflow quality, security, reliability    |
-| `review-ado-pipelines` | Azure DevOps YAML pipeline quality, security, reliability |
-| `review-pull-request`  | Pull request review (GitHub and ADO)                      |
-| `review-security`      | App security review (OWASP, Azure) and CI security gates  |
-| `review-waf`           | Azure Well-Architected Framework pillar assessment (RAG)  |
-| `review-caf`           | Cloud Adoption Framework landing zone alignment           |
-
-**Format**
-
-| Skill                  | Purpose                                                                      |
-| ---------------------- | ---------------------------------------------------------------------------- |
-| `format-terraform`     | Terraform file structure, naming, tagging, pinning, and formatting standards |
-| `format-ado-pipelines` | Azure DevOps pipeline file structure, layout, and formatting standards       |
-| `format-gha-pipelines` | GitHub Actions workflow file structure, layout, and formatting standards     |
-
-**Generate**
-
-| Skill                    | Purpose                                               |
-| ------------------------ | ----------------------------------------------------- |
-| `generate-diagram`       | Mermaid architecture diagrams from IaC/code           |
-| `generate-cost-estimate` | Azure cost estimate from IaC                          |
-| `generate-readme`        | Brief project README from code and standards template |
-
-**Create**
-
-| Skill         | Purpose                                            |
-| ------------- | -------------------------------------------------- |
-| `create-pr`   | Create a pull request (GitHub or Azure DevOps)     |
-| `raise-issue` | Raise a GitHub issue or Azure DevOps work item through Backlog |
-
-> Repository creation and configuration are handled by Terraform; the former `config-repo-gh` / `config-repo-ado` skills have been decommissioned.
-
-**Git**
-
-| Skill             | Purpose                                    |
-| ----------------- | ------------------------------------------ |
-| `git-commit-push` | Stage, commit, and push with safety checks |
-
-**Microsoft Foundry**
-
-| Skill               | Purpose                                                                                                                             |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `microsoft-foundry` | Full Foundry agent lifecycle: deploy, invoke, observe, evaluate, optimize prompts, manage models/quota/RBAC, and provision projects |
-
-**Other**
-
-| Skill   | Purpose                                                |
-| ------- | ------------------------------------------------------ |
-| `learn` | Quiz on recent code changes to reinforce understanding |
+| Skill | Purpose |
+| --- | --- |
+| `buy-for-life` | Research durable products and UK value |
+| `create-pr` | Create GitHub or Azure DevOps pull requests |
+| `distill-knowledge` | Promote durable knowledge into Obsidian notes |
+| `generate-readme` | Generate a brief project README |
+| `git-commit-push` | Stage, commit and push with safety checks |
+| `handoff` | Save portable context for another machine or agent |
+| `humanizer` | Remove AI-writing patterns from text |
+| `negotiate-voss` | Draft negotiation and difficult-conversation messages |
+| `process-inbox` | Process Obsidian inbox captures |
+| `terraform-standards` | Apply house Terraform engineering standards |
 
 ## Common Tasks
 
@@ -124,8 +81,8 @@ back to file copies and prints a reminder â€” run `.\scripts\Install-Develo
 after each `git pull` to refresh the copies. An Administrator shell bypasses
 this restriction and produces true symlinks.
 
-See `docs/machine-setup.md` for full prerequisites and the manual equivalent
-on Linux/macOS.
+See `docs/developer-workflow.md` for machine checks, portable handoffs,
+and scheduling options. The installer and machine sync target Windows.
 
 ### Installing user logon tasks
 

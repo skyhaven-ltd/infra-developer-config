@@ -62,6 +62,7 @@ param (
     [switch]$InstallScheduledTask,
     [string]$TaskName = "Install Developer Config",
     [string]$ObsidianVaultPath,
+    [string]$HandoffDirectory,
     [string]$KnowledgeMcpToken,
     [string]$KnowledgeMcpUrl = "https://knowledge.lab.skyhaven.ltd/mcp"
 )
@@ -235,8 +236,8 @@ function Initialize-SkillsDirectory {
 function Get-RepoSkills {
     param([string]$RepoSkills)
 
-    $skills = Get-ChildItem -LiteralPath $RepoSkills -Recurse -Directory |
-        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "SKILL.md") } |
+    $skills = Get-ChildItem -LiteralPath $RepoSkills -Recurse -File -Filter "SKILL.md" |
+        ForEach-Object { $_.Directory } |
         Sort-Object -Property Name
 
     $duplicates = $skills |
@@ -517,7 +518,7 @@ function Read-SharedCodexConfig {
         if ($null -eq $keyName) { continue }
 
         $qualifiedKey = if ($section) { "$section.$keyName" } else { $keyName }
-        if (@("notify", "approval_policy", "sandbox_mode", "windows.sandbox") -contains $qualifiedKey) {
+        if (@("model", "model_reasoning_effort", "notify", "approval_policy", "sandbox_mode", "windows.sandbox") -contains $qualifiedKey) {
             $shared[$qualifiedKey] = $line
         }
     }
@@ -685,7 +686,9 @@ function Merge-CodexConfig {
 
     $lines = @(Remove-TomlScalarLine -Lines $lines -QualifiedKey "model_instructions_file")
 
-    foreach ($qualifiedKey in @("notify", "approval_policy", "sandbox_mode", "windows.sandbox")) {
+    $localDefaults = Read-SharedCodexConfig $Destination
+    foreach ($qualifiedKey in @("model", "model_reasoning_effort", "notify", "approval_policy", "sandbox_mode", "windows.sandbox")) {
+        if (($qualifiedKey -in @("model", "model_reasoning_effort")) -and $localDefaults.ContainsKey($qualifiedKey)) { continue }
         if ($shared.ContainsKey($qualifiedKey)) {
             $replacementLine = $shared[$qualifiedKey]
             if ($qualifiedKey -eq "notify") {
@@ -705,8 +708,13 @@ function Merge-CodexConfig {
         $lines = @($lines) + @("") + @($managedSections[$sectionName])
     }
 
+    $existingLines = if (Test-Path -LiteralPath $Destination) { @(Get-Content -LiteralPath $Destination -Encoding UTF8) } else { @() }
+    if (($existingLines -join "`n") -ceq ($lines -join "`n")) {
+        Write-Host "  [skip] $Destination already configured" -ForegroundColor DarkGray
+        return
+    }
     Set-Content -LiteralPath $Destination -Value $lines -Encoding UTF8
-    Write-Host "  [merge]  $Destination <= shared permissions/sandbox settings" -ForegroundColor Green
+    Write-Host "  [merge]  $Destination <= shared settings and missing model defaults" -ForegroundColor Green
 }
 
 function Set-ObsidianVaultPath {
@@ -820,6 +828,8 @@ function ConvertTo-TaskArgument {
 }
 
 function Get-PowerShellExecutablePath {
+    $pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+    if ($pwsh) { return $pwsh.Source }
     $currentPowerShell = Join-Path -Path $PSHOME -ChildPath "powershell.exe"
     if (Test-Path -LiteralPath $currentPowerShell -PathType Leaf) {
         return $currentPowerShell
@@ -938,7 +948,7 @@ if (-not $canSymlink) {
 
 Write-Host "`nSkills" -ForegroundColor Cyan
 $claude = "$env:USERPROFILE\.claude"
-$codex = "$env:USERPROFILE\.codex"
+$codex = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { "$env:USERPROFILE\.codex" }
 $repoSkills = "$Repo\skills"
 $skills = @(Get-RepoSkills $repoSkills)
 Install-Skills "$claude\skills" $repoSkills "Claude" $skills
@@ -980,6 +990,13 @@ Install-KnowledgeMcp $KnowledgeMcpUrl $KnowledgeMcpToken $claudeConfigPaths
 
 Write-Host "`nObsidian" -ForegroundColor Cyan
 Set-ObsidianVaultPath $ObsidianVaultPath
+if ($HandoffDirectory) {
+    $resolvedHandoffDirectory = (Resolve-Path -LiteralPath $HandoffDirectory -ErrorAction Stop).Path
+    if (-not (Test-Path -LiteralPath $resolvedHandoffDirectory -PathType Container)) { throw "HandoffDirectory must be an existing synced directory." }
+    [Environment]::SetEnvironmentVariable("AGENT_HANDOFF_DIR", $resolvedHandoffDirectory, "User")
+    $env:AGENT_HANDOFF_DIR = $resolvedHandoffDirectory
+    Write-Host "  [env]  AGENT_HANDOFF_DIR = $resolvedHandoffDirectory" -ForegroundColor Green
+}
 
 # -- Cloud contexts -----------------------------------------------------------
 

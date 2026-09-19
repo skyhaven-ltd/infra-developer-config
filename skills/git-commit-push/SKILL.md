@@ -3,7 +3,7 @@ name: git-commit-push
 description: Stage, commit, and push changes to origin
 ---
 
-You have EXPLICIT authorisation to stage, commit, and push.
+An explicit user request to commit and push, including a combined commit/push/PR request, authorizes those actions without another confirmation. Loading this skill alone is not authorization. Honor any narrower scope or request to review first; retain the risk checks below.
 
 Use the bundled Python helper for deterministic checks, staging, commits, and push. Use the LLM only for judgement: reviewing risk flags, deciding logical commit groups when needed, and writing commit messages.
 

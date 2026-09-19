@@ -17,13 +17,13 @@ Inspect these fields:
 
 - `vcs`: `github`, `ado`, or `null`. If `null` (risk flag `vcs_not_detected`), ask the user which VCS to use and pass it as `vcs` in the plan, or fix the `origin` remote.
 - Stop if `on_default_branch` is true or `existing_pull_requests` is non-empty.
-- Ask the user if `branch_prefix_unclear` appears in `risk_flags`. Branches must be prefixed `patch/`, `minor/`, or `major/` (also accepted: `feature/`, `fix/`, `chore/`, `docs/`).
+- If `branch_prefix_unclear` appears in `risk_flags`, resolve the intended change type before proceeding. Branches must be prefixed `patch/`, `minor/`, or `major/`; do not silently rename an existing branch.
 - `branch_mapping.title_prefix` is derived from the branch type (`patch/foo` -> `[PATCH]`, `minor/foo` -> `[MINOR]`, `major/foo` -> `[MAJOR]`). The PR title must start with it.
 - `pull_request_template`: the shared template at `.github/.github/PULL_REQUEST_TEMPLATE/pull-request.md`. Do not invent or use embedded templates.
 
-## Step 2 — Draft and confirm
+## Step 2 — Draft and authorize
 
-Draft the title (with the prefix) and a body based on the shared template. Show them to the user and only set `approved: true` after explicit approval.
+Draft the title (with the prefix) and a body based on the shared template. An explicit request to create a PR, including a combined commit/push/PR request, authorizes creation with an agent-written title and body; set `approved: true` without asking again. If the user requested only a draft for review or made creation conditional on approval, show the draft and wait for that approval. Resolve material ambiguity about scope, repository, or target branch before creation. A request to create a PR does not authorize merging it.
 
 ## Step 3 — Plan
 

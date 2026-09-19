@@ -18,6 +18,7 @@ Tracked in version control (enforced by `.gitignore`):
 | `codex/config.toml`                   | Codex CLI           | Model, reasoning effort, options                                                               |
 | `scripts/Install-DeveloperConfig.ps1` | All                 | One-shot link creation for a new Windows machine; can install a per-user logon task for itself |
 | `scripts/Update-GitRepositories.ps1`  | Git                 | Pulls all repositories under a configurable root; can install a per-user logon task for itself |
+| `scripts/Test-DeveloperMachine.ps1` | All | Read-only CLI, authentication, config, skill and MCP checks |
 | `scripts/Sync-DeveloperMachine.ps1`   | All                 | Single entry point: ensures its own per-user logon task, clones missing org repos, pulls all, then runs the installer |
 | `docs/`                               | â€”                   | Per-tool setup documentation                                                                   |
 
@@ -26,7 +27,7 @@ credentials, etc.) is excluded.
 
 ## Skills
 
-Each skill lives in `skills/<category>/<name>/SKILL.md` (categories: `engineering/`, `git/`, `tools/`) and is a markdown file with YAML frontmatter. The frontmatter fields are:
+Each skill lives in `skills/<name>/SKILL.md` and is a markdown file with YAML frontmatter. The frontmatter fields are:
 
 ```yaml
 ---
@@ -42,35 +43,18 @@ The body is the instruction prompt used by Claude or Codex when the skill is inv
 
 ### Available Skills
 
-**engineering/**
-
-| Skill                     | Purpose                                                                        |
-| ------------------------- | ------------------------------------------------------------------------------ |
-| `test-driven-development` | Test-first workflow: red-green-refactor via vertical slices, integration-style tests |
-
-**git/**
-
-| Skill             | Purpose                                            |
-| ----------------- | -------------------------------------------------- |
-| `create-pr`       | Create a pull request (GitHub or Azure DevOps)     |
-| `git-commit-push` | Stage, commit, and push with safety checks         |
-| `raise-issue`     | Raise a GitHub issue or Azure DevOps work item through Backlog |
-
-**tools/**
-
-| Skill                 | Purpose                                                                    |
-| --------------------- | -------------------------------------------------------------------------- |
-| `create-blog-post`    | CVEngine portfolio blog posts with helper-validated front matter and build |
-| `distill-knowledge`   | Promote knowledge MCP memories into Obsidian vault notes; groom the store  |
-| `generate-readme`     | Brief project README from repo code                                        |
-| `handoff`             | Compact the conversation into a handoff doc for the next session           |
-| `humanizer`           | Remove AI-writing patterns from text                                       |
-| `process-inbox`       | File Obsidian inbox captures into permanent notes                          |
-| `pythonize-skill`     | Move a skill's deterministic work into bundled Python helpers              |
-| `show-and-tell`       | Stakeholder-facing demo run sheet from a commit or commit range            |
-| `teach`               | Multi-session teaching workspace with lessons and learning records         |
-| `terraform-standards` | House Terraform engineering standards for review, refactor, and validation |
-| `write-vault-note`    | Write or update Obsidian vault notes with schema validation                |
+| Skill | Purpose |
+| --- | --- |
+| `buy-for-life` | Research durable products and UK value |
+| `create-pr` | Create GitHub or Azure DevOps pull requests |
+| `distill-knowledge` | Promote durable knowledge into Obsidian notes |
+| `generate-readme` | Generate a brief project README |
+| `git-commit-push` | Stage, commit and push with safety checks |
+| `handoff` | Save portable context for another machine or agent |
+| `humanizer` | Remove AI-writing patterns from text |
+| `negotiate-voss` | Draft negotiation and difficult-conversation messages |
+| `process-inbox` | Process Obsidian inbox captures |
+| `terraform-standards` | Apply house Terraform engineering standards |
 
 ## Common Tasks
 
@@ -81,7 +65,7 @@ The body is the instruction prompt used by Claude or Codex when the skill is inv
 1. Registers/refreshes its own per-user logon scheduled task (RunLevel Limited, no admin needed) and removes the legacy "Git Pull All Repositories" / "Install Developer Config" tasks
 2. Lists non-archived repos in the `skyhaven-ltd` GitHub org (via `gh`) and clones any missing under `<RepositoriesRoot>\Sky Haven` — new org repos appear automatically on the next run
 3. Runs `Update-GitRepositories.ps1` to `git pull --ff-only` every repo under the root (honouring the per-machine include list in `scripts/git-repositories/<COMPUTERNAME>.txt`)
-4. Runs `Install-DeveloperConfig.ps1`, which installs skills into `~/.claude/skills`, `~/.codex/skills`, **and** any existing profile variants (`~/.claude-*`, `~/.codex-*`, e.g. `.claude-work` for enterprise accounts)
+4. Runs `Install-DeveloperConfig.ps1`, which installs skills into `~/.claude/skills` and `~/.codex/skills` (or `CODEX_HOME/skills`), preserving Claude compatibility; use `-CheckHealth` to run the read-only machine checks afterwards
 
 ```powershell
 .\scripts\Sync-DeveloperMachine.ps1   # one-time bootstrap; installs its own logon task
@@ -91,7 +75,7 @@ Requires `gh auth login` (and `gh auth setup-git` for HTTPS clone credentials). 
 
 ### Adding a new skill
 
-Create `skills/<category>/<name>/SKILL.md` with the frontmatter and prompt body, then commit and push.
+Create `skills/<name>/SKILL.md` with the frontmatter and prompt body, then commit and push.
 
 Existing skill edits are immediately available on linked machines after a `git pull` when junctions or symlinks are available. When the installer falls back to copies, re-run `.\scripts\Install-DeveloperConfig.ps1` after pulling to refresh them. When adding a new skill folder, re-run the installer so both Claude and Codex get per-skill entries under `~/.claude/skills/<name>` and `~/.codex/skills/<name>`.
 
@@ -113,8 +97,8 @@ back to file copies and prints a reminder â€” run `.\scripts\Install-Develo
 after each `git pull` to refresh the copies. An Administrator shell bypasses
 this restriction and produces true symlinks.
 
-See `docs/machine-setup.md` for full prerequisites and the manual equivalent
-on Linux/macOS.
+See `docs/developer-workflow.md` for machine checks, portable handoffs,
+and scheduling options. The installer and machine sync target Windows.
 
 ### Installing user logon tasks
 

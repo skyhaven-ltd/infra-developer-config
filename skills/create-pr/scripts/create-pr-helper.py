@@ -5,7 +5,7 @@ Detects whether the target repository is hosted on GitHub or Azure DevOps from
 its ``origin`` remote and dispatches pull-request creation to the right backend
 (``gh`` or ``az``). The LLM remains responsible for judgement: drafting the PR
 title/body from the diff, confirming the VCS when it cannot be inferred, and
-obtaining explicit approval before the side-effecting ``apply`` command.
+checking user authorization before the side-effecting ``apply`` command.
 """
 from __future__ import annotations
 import argparse, json, os, re, shutil, subprocess, sys
@@ -98,7 +98,7 @@ def load_plan(path: str) -> dict[str, Any]:
     return data
 
 def require_approved(plan: dict[str, Any]):
-    if plan.get('approved') is not True: raise SkillError('Plan must include approved=true after explicit user approval')
+    if plan.get('approved') is not True: raise SkillError('Plan must include approved=true after a user request to create the PR or approval of its draft')
 
 def parse_template(path: Path) -> dict[str,Any]:
     text=path.read_text(encoding='utf-8')
@@ -121,7 +121,7 @@ def pull_request_template(start: Path) -> dict[str,Any]|None:
     return find_shared_template(start,'PULL_REQUEST_TEMPLATE','pull-request.md')
 
 def branch_kind(branch: str) -> dict[str,str]|None:
-    table=[(('feature/',),'feature'),(('major/','breaking/'),'feature'),(('fix/','hotfix/','bug/'),'bug_fix'),(('minor/','patch/','chore/','docs/'),'maintenance')]
+    table=[(('major/',),'feature'),(('minor/','patch/'),'maintenance')]
     for prefixes,template in table:
         for prefix in prefixes:
             if branch.startswith(prefix):
@@ -216,6 +216,7 @@ def apply(t: str, plan_path: str, dry: bool) -> dict[str,Any]:
     p=target_dir(t); template=pull_request_template(p)
     if not template: raise SkillError('Shared pull request template not found: .github/.github/PULL_REQUEST_TEMPLATE/pull-request.md')
     plan=load_plan(plan_path); require_approved(plan)
+    if not branch_kind(current_branch(p) or ''): raise SkillError('Branch must begin with patch/, minor/, or major/')
     vcs=resolve_vcs(p,plan.get('vcs'))
     if vcs=='github': return gh_apply(p,plan,dry)
     if vcs=='ado': return ado_apply(p,plan,dry)
