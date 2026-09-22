@@ -86,6 +86,14 @@ function Get-NotifierLogs {
 }
 
 $cleanupTargets = @($targets | ForEach-Object { [pscustomobject]@{ Item = $_; Boundary = $rootPath } })
+$sandboxPath = Join-Path $rootPath ".sandbox"
+if (Test-Path -LiteralPath $sandboxPath) {
+    Assert-CleanupTree -Item (Get-Item -LiteralPath $sandboxPath -Force)
+    $sandboxLog = Join-Path $sandboxPath "sandbox.log"
+    if (Test-Path -LiteralPath $sandboxLog -PathType Leaf) {
+        $cleanupTargets += [pscustomobject]@{ Item = Get-Item -LiteralPath $sandboxLog -Force; Boundary = $rootPath }
+    }
+}
 foreach ($location in @($TemporaryDirectory, $EditorLogDirectory)) {
     if (-not (Test-Path -LiteralPath $location)) { continue }
     $locationItem = Get-Item -LiteralPath $location -Force
@@ -112,13 +120,25 @@ foreach ($location in @($TemporaryDirectory, $EditorLogDirectory)) {
 foreach ($target in $cleanupTargets) {
     Assert-CleanupTree -Item $target.Item -Boundary $target.Boundary
 }
+$failedTargets = 0
 foreach ($target in $cleanupTargets) {
     if ($PSCmdlet.ShouldProcess($target.Item.FullName, "Permanently delete local session data (not secure erasure)")) {
         Assert-CleanupTree -Item (Get-Item -LiteralPath $target.Item.FullName -Force) -Boundary $target.Boundary
-        Remove-Item -LiteralPath $target.Item.FullName -Recurse -Force
+        try {
+            Remove-Item -LiteralPath $target.Item.FullName -Recurse -Force
+        } catch [System.IO.IOException], [System.UnauthorizedAccessException] {
+            $failedTargets++
+            Write-Warning "Could not fully remove '$($target.Item.FullName)': $($_.Exception.Message) Close the app using the file or check permissions, then rerun cleanup."
+            continue
+        }
         if (Test-Path -LiteralPath $target.Item.FullName) {
-            throw "Cleanup target still exists: $($target.Item.FullName)"
+            $failedTargets++
+            Write-Warning "Cleanup target still exists: $($target.Item.FullName)"
         }
     }
 }
-Write-Output "Session cleanup finished. Unknown files and preserved configuration are not removed."
+if ($failedTargets -gt 0) {
+    Write-Warning "Session cleanup incomplete: $failedTargets target(s) could not be fully removed. Other eligible targets were processed. Rerun cleanup after resolving the warnings."
+} else {
+    Write-Output "Session cleanup finished. Unknown files and preserved configuration are not removed."
+}

@@ -19,6 +19,10 @@ function Get-Process {
 }
 
 try {
+    New-Item -ItemType Directory -Path (Join-Path $codexFixture ".sandbox"), (Join-Path $codexFixture ".sandbox-bin") | Out-Null
+    Set-Content -LiteralPath (Join-Path $codexFixture ".sandbox\sandbox.log") -Value "sandbox activity"
+    Set-Content -LiteralPath (Join-Path $codexFixture ".sandbox\setup.json") -Value "preserve setup"
+    Set-Content -LiteralPath (Join-Path $codexFixture ".sandbox-bin\codex.exe") -Value "preserve tooling"
     Set-Content -LiteralPath (Join-Path $temporaryFixture "codex-clipboard-abc123.png") -Value "test image"
     Set-Content -LiteralPath (Join-Path $temporaryFixture "unrelated.png") -Value "preserve image"
     Set-Content -LiteralPath (Join-Path $temporaryFixture "codex-project-work.md") -Value "preserve work"
@@ -81,8 +85,29 @@ try {
         Assert-True ((Get-Content -LiteralPath (Join-Path $codexFixture $name) -Raw).Trim() -eq "preserve-$name") "Cleanup changed $name."
     }
     Assert-True (Test-Path -LiteralPath (Join-Path $codexFixture "skills\test.md")) "Cleanup deleted a skill."
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $codexFixture ".sandbox\sandbox.log"))) "Cleanup left the sandbox log."
+    Assert-True (Test-Path -LiteralPath (Join-Path $codexFixture ".sandbox\setup.json")) "Cleanup deleted sandbox setup."
+    Assert-True (Test-Path -LiteralPath (Join-Path $codexFixture ".sandbox-bin\codex.exe")) "Cleanup deleted sandbox tooling."
     & $scriptPath @cleanupArguments
-    Write-Output "PASS: running-process guard, preview, link guard, deletion, preservation, repeated cleanup."
+    $lockedLog = Join-Path $editorFixture "window1\10-Codex Finish Notifier.log"
+    $laterLog = Join-Path $editorFixture "window1\11-Codex Finish Notifier.log"
+    Set-Content -LiteralPath $lockedLog -Value "active log"
+    Set-Content -LiteralPath $laterLog -Value "old log"
+    $handle = [IO.File]::Open($lockedLog, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    try {
+        $cleanupOutput = & $scriptPath @cleanupArguments -WarningVariable cleanupWarnings -WarningAction SilentlyContinue
+        Assert-True (Test-Path -LiteralPath $lockedLog) "Cleanup removed a locked log."
+        Assert-True (-not (Test-Path -LiteralPath $laterLog)) "Locked log prevented remaining cleanup."
+        Assert-True (@($cleanupWarnings | Where-Object { $_.Message -like "*10-Codex Finish Notifier.log*" }).Count -gt 0) "Locked log was not flagged."
+        Assert-True (@($cleanupWarnings | Where-Object { $_.Message -like "Session cleanup incomplete:*" }).Count -eq 1) "Incomplete cleanup was not reported."
+        Assert-True (@($cleanupOutput | Where-Object { $_ -like "Session cleanup finished.*" }).Count -eq 0) "Incomplete cleanup reported success."
+    }
+    finally {
+        $handle.Dispose()
+    }
+    & $scriptPath @cleanupArguments
+    Assert-True (-not (Test-Path -LiteralPath $lockedLog)) "Cleanup did not remove the released log."
+    Write-Output "PASS: running-process guard, preview, link guard, deletion, preservation, repeated cleanup, locked-log warning and recovery."
 }
 finally {
     $fixturePath = [IO.Path]::GetFullPath($fixture)
