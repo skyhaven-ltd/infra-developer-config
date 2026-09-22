@@ -80,6 +80,35 @@ class CloudProfileTests(unittest.TestCase):
             ],
         )
 
+    def test_dataverse_profile_does_not_require_subscription_or_github(self) -> None:
+        profile = {"name": "dataverse", "azureTenantId": "tenant-id",
+                   "dataverseUrl": "https://example.crm.dynamics.com"}
+        with tempfile.TemporaryDirectory() as directory:
+            environment = cloud_profile.profile_environment(Path(directory), profile, {})
+        self.assertEqual(environment["DATAVERSE_URL"], profile["dataverseUrl"])
+        self.assertEqual(environment["AZURE_SUBSCRIPTION_ID"], "")
+        result = type("Completed", (), {"returncode": 0, "stdout": json.dumps({"tenantId": "tenant-id", "id": "tenant-id"})})()
+        with (patch.object(cloud_profile, "executable", return_value="az"),
+              patch.object(cloud_profile, "run_capture", return_value=result)):
+            cloud_profile.validate_azure(profile, environment)
+        with self.assertRaisesRegex(cloud_profile.CloudProfileError, "GitHub configured"):
+            cloud_profile.validate_github(profile, environment)
+
+    def test_wrong_tenant_and_subscription_are_rejected(self) -> None:
+        result = type("Completed", (), {"returncode": 0, "stdout": json.dumps({"tenantId": "other", "id": "other"})})()
+        with (patch.object(cloud_profile, "executable", return_value="az"),
+              patch.object(cloud_profile, "run_capture", return_value=result)):
+            with self.assertRaisesRegex(cloud_profile.CloudProfileError, "mismatch"):
+                cloud_profile.validate_azure(self.profile(), {})
+
+    def test_unsafe_profile_name_is_rejected_before_creating_directories(self) -> None:
+        profile = self.profile()
+        profile["name"] = "../escape"
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(cloud_profile.CloudProfileError, "invalid cloud profile name"):
+                cloud_profile.profile_environment(Path(directory), profile, {})
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
 
 if __name__ == "__main__":
     unittest.main()

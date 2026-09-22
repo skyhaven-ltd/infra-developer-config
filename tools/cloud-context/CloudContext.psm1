@@ -68,10 +68,11 @@ function New-CloudProfile {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][string]$AzureTenantId,
-        [Parameter(Mandatory = $true)][string]$AzureSubscriptionId,
-        [Parameter(Mandatory = $true)][string]$GitHubOrg,
-        [Parameter(Mandatory = $true)][string]$GitHubUser,
+        [string]$AzureSubscriptionId = "",
+        [string]$GitHubOrg = "",
+        [string]$GitHubUser = "",
         [string]$GitHubHost = "github.com",
+        [string]$DataverseUrl = "",
         [switch]$Force
     )
 
@@ -91,6 +92,7 @@ function New-CloudProfile {
         githubOrg = $GitHubOrg
     }
     $profile.githubUser = $GitHubUser
+    $profile.dataverseUrl = $DataverseUrl.TrimEnd('/')
 
     $remaining = @($profiles | Where-Object { $_.name -ne $Name })
     $updatedStore = [ordered]@{ profiles = @($remaining) + @([pscustomobject]$profile) }
@@ -135,6 +137,7 @@ function Set-CloudProfileEnvironment {
     $env:GH_CONFIG_DIR = $githubConfig
     $env:GH_HOST = $Profile.githubHost
     $env:GH_ORG = $Profile.githubOrg
+    $env:DATAVERSE_URL = if ($Profile.PSObject.Properties.Name -contains "dataverseUrl") { $Profile.dataverseUrl } else { "" }
 }
 
 function Use-CloudProfile {
@@ -245,12 +248,15 @@ function Assert-CloudContext {
         if (-not $account) {
             throw "Azure CLI is not authenticated for profile '$($profile.name)'. Run Connect-CloudProfile -AzureOnly."
         }
-        if ($account.tenantId -ne $profile.azureTenantId -or $account.id -ne $profile.azureSubscriptionId) {
+        if ($account.tenantId -ne $profile.azureTenantId -or ($profile.azureSubscriptionId -and $account.id -ne $profile.azureSubscriptionId)) {
             throw "Azure context mismatch for '$($profile.name)'. Expected tenant '$($profile.azureTenantId)' and subscription '$($profile.azureSubscriptionId)', got tenant '$($account.tenantId)' and subscription '$($account.id)'."
         }
     }
 
-    if (-not $AzureOnly) {
+    if ($GitHubOnly -and -not $profile.githubUser) {
+        throw "This profile does not have GitHub configured."
+    }
+    if (-not $AzureOnly -and $profile.githubUser) {
         & gh auth status --hostname $profile.githubHost 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) {
             throw "GitHub CLI is not authenticated for '$($profile.githubHost)' in profile '$($profile.name)'. Run Connect-CloudProfile -GitHubOnly."
@@ -279,13 +285,22 @@ function Connect-CloudProfile {
     $profile = Get-CloudProfile -Name $env:CLOUD_PROFILE
 
     if (-not $GitHubOnly) {
-        & az login --tenant $profile.azureTenantId
+        $loginArguments = @("login", "--tenant", $profile.azureTenantId, "--allow-no-subscriptions")
+        if (($profile.PSObject.Properties.Name -contains "dataverseUrl") -and $profile.dataverseUrl) {
+            $loginArguments += @("--scope", "$($profile.dataverseUrl)/.default")
+        }
+        & az @loginArguments
         if ($LASTEXITCODE -ne 0) { throw "Azure CLI login failed." }
-        & az account set --subscription $profile.azureSubscriptionId
-        if ($LASTEXITCODE -ne 0) { throw "Unable to select Azure subscription '$($profile.azureSubscriptionId)'." }
+        if ($profile.azureSubscriptionId) {
+            & az account set --subscription $profile.azureSubscriptionId
+            if ($LASTEXITCODE -ne 0) { throw "Unable to select Azure subscription '$($profile.azureSubscriptionId)'." }
+        }
     }
 
-    if (-not $AzureOnly) {
+    if ($GitHubOnly -and -not $profile.githubUser) {
+        throw "This profile does not have GitHub configured."
+    }
+    if (-not $AzureOnly -and $profile.githubUser) {
         & gh auth login --hostname $profile.githubHost
         if ($LASTEXITCODE -ne 0) { throw "GitHub CLI login failed." }
     }

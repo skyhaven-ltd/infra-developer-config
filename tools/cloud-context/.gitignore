@@ -1,0 +1,7 @@
+gui/bin/
+gui/obj/
+gui/tests/bin/
+gui/tests/obj/
+dist/
+__pycache__/
+tests/__pycache__/

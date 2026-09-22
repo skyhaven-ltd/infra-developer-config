@@ -7,6 +7,67 @@ not contain passwords, tokens, or client secrets.
 
 ## Install
 
+### Windows GUI
+
+Build the standalone executable with the .NET 10 SDK:
+
+```powershell
+.\tools\cloud-context\Build-CloudContext.ps1
+```
+
+Open `tools\cloud-context\dist\win-x64\CloudContext.exe`. This single file
+includes the .NET runtime; Azure CLI must be installed and available on PATH.
+You can copy the executable elsewhere. Profiles and credentials remain under
+`~/.config/cloud-context`, or the directory set by `CLOUD_CONTEXT_HOME`.
+Use `-Runtime win-arm64` when building for Windows on ARM.
+
+1. Click **New environment**, enter a profile name and directory (tenant) ID.
+2. Enter a subscription ID for Azure resources, a Dataverse environment URL,
+   or both. GitHub configuration is not required. For Dataverse-only access,
+   the subscription can be blank.
+3. Click **Connect**. The app checks the cached session first, then opens the
+   native Microsoft sign-in flow if needed. **Sign in again** forces login;
+   **Use device-code sign-in** displays the code in the app's output area.
+4. After a tenant-only login, **Load subscriptions** lists cached subscriptions
+   in that tenant. Choose an ID, save, and connect to select it.
+5. Use **Copy Codex instructions** for commands using the installed
+   `cloud-profile` launcher, or **Open PowerShell** for a new shell with the
+   chosen Azure cache and `DATAVERSE_URL` already configured.
+
+Existing terminals retain their context. The app does not change their process
+environment or overwrite the default Azure CLI cache. Editing a saved profile
+preserves its GitHub and other metadata. The GUI supports the Azure public
+cloud and Dataverse through `az rest`; it does not configure `pac` authentication.
+
+The app verifies Azure tenant/subscription identity and token acquisition.
+For Dataverse it also makes a read-only `WhoAmI` request to verify environment
+access. An Azure token check alone does not prove resource-level RBAC access.
+
+**Check access / expiry** displays the selected resource's access-token expiry
+in local time and a live countdown. It also shows the exact Azure CLI cache
+directory and lists token/MSAL cache files found there, without reading or
+displaying their contents. Windows broker authentication may additionally use
+the Windows-managed account store.
+
+An access-token countdown is not a countdown to the next login: Azure CLI can
+silently renew access tokens using its cached session. Checking expiry may
+renew a token. The longer session's remaining lifetime is not exposed reliably;
+MFA, revocation and tenant policies can require another sign-in. The countdown
+is a snapshot and is refreshed by connecting or checking access. Azure CLI
+2.54 or newer is required for the `expires_on` timestamp.
+
+See Microsoft's [interactive Azure CLI authentication documentation](https://learn.microsoft.com/en-us/cli/azure/authenticate-azure-cli-interactively)
+for broker, device-code and refresh-token behavior.
+
+Run the GUI backend and launcher checks with:
+
+```powershell
+dotnet run --project tools/cloud-context/gui/tests/CloudContext.Tests.csproj
+python -m unittest discover -s tools/cloud-context/tests -p test_*.py
+```
+
+### CLI and PowerShell integration
+
 Run the developer-config installer and open a new PowerShell session:
 
 ```powershell

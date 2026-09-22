@@ -46,6 +46,20 @@ Describe "CloudContext profile metadata" {
         (Get-Content (Join-Path $env:CLOUD_CONTEXT_HOME "active-profile") -Raw).Trim() | Should Be "customer-prod"
     }
 
+    It "supports Dataverse profiles without subscriptions or GitHub" {
+        New-CloudProfile `
+            -Name "dataverse-dev" `
+            -AzureTenantId "tenant-id" `
+            -DataverseUrl "https://example.crm.dynamics.com/" | Out-Null
+
+        Use-CloudProfile "dataverse-dev" -Quiet
+
+        $profile = Get-CloudProfile "dataverse-dev"
+        $profile.azureSubscriptionId | Should Be ""
+        $profile.githubUser | Should Be ""
+        $env:DATAVERSE_URL | Should Be "https://example.crm.dynamics.com"
+    }
+
     It "rejects unsafe profile names" {
         {
             New-CloudProfile `

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -53,10 +54,6 @@ def profile_environment(
     required = (
         "name",
         "azureTenantId",
-        "azureSubscriptionId",
-        "githubHost",
-        "githubOrg",
-        "githubUser",
     )
     missing = [field for field in required if not profile.get(field)]
     if missing:
@@ -65,6 +62,8 @@ def profile_environment(
         )
 
     name = str(profile["name"])
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", name) or name.endswith("."):
+        raise CloudProfileError("invalid cloud profile name")
     azure_directory = root / "cli" / "azure" / name
     github_directory = root / "cli" / "github" / name
     azure_directory.mkdir(parents=True, exist_ok=True)
@@ -76,12 +75,13 @@ def profile_environment(
             "CLOUD_PROFILE": name,
             "AZURE_CONFIG_DIR": str(azure_directory),
             "AZURE_TENANT_ID": str(profile["azureTenantId"]),
-            "AZURE_SUBSCRIPTION_ID": str(profile["azureSubscriptionId"]),
+            "AZURE_SUBSCRIPTION_ID": str(profile.get("azureSubscriptionId", "")),
             "ARM_TENANT_ID": str(profile["azureTenantId"]),
-            "ARM_SUBSCRIPTION_ID": str(profile["azureSubscriptionId"]),
+            "ARM_SUBSCRIPTION_ID": str(profile.get("azureSubscriptionId", "")),
             "GH_CONFIG_DIR": str(github_directory),
-            "GH_HOST": str(profile["githubHost"]),
-            "GH_ORG": str(profile["githubOrg"]),
+            "GH_HOST": str(profile.get("githubHost", "github.com")),
+            "GH_ORG": str(profile.get("githubOrg", "")),
+            "DATAVERSE_URL": str(profile.get("dataverseUrl", "")),
         }
     )
     return environment
@@ -119,18 +119,23 @@ def validate_azure(profile: dict[str, Any], environment: dict[str, str]) -> None
     if (
         str(account.get("tenantId", "")).casefold()
         != str(profile["azureTenantId"]).casefold()
-        or str(account.get("id", "")).casefold()
-        != str(profile["azureSubscriptionId"]).casefold()
+        or (
+            profile.get("azureSubscriptionId")
+            and str(account.get("id", "")).casefold()
+            != str(profile["azureSubscriptionId"]).casefold()
+        )
     ):
         raise CloudProfileError(
             "Azure context mismatch: expected "
             f"tenant '{profile['azureTenantId']}' and subscription "
-            f"'{profile['azureSubscriptionId']}', got tenant "
+            f"'{profile.get('azureSubscriptionId', '')}', got tenant "
             f"'{account.get('tenantId')}' and subscription '{account.get('id')}'"
         )
 
 
 def validate_github(profile: dict[str, Any], environment: dict[str, str]) -> None:
+    if not all(profile.get(field) for field in ("githubHost", "githubOrg", "githubUser")):
+        raise CloudProfileError("this profile does not have GitHub configured")
     gh = executable("gh")
     status = run_capture(
         [gh, "auth", "status", "--hostname", str(profile["githubHost"])], environment
