@@ -162,6 +162,21 @@ function Install-CloudContext {
         $env:Path = "$env:Path;$binDirectory"
     }
 
+    $executable = @("win-x64", "win-arm64") |
+        ForEach-Object { Join-Path $source "dist\$_\CloudContext.exe" } |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+        Select-Object -First 1
+    if ($executable) {
+        $shortcutPath = Join-Path ([Environment]::GetFolderPath("Programs")) "Cloud Context.lnk"
+        $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $executable
+        $shortcut.WorkingDirectory = Split-Path -Parent $executable
+        $shortcut.Save()
+        Write-Host "  [shortcut] $shortcutPath -> $executable" -ForegroundColor Green
+    } else {
+        Write-Host "  [skip] Cloud Context GUI is not built; run tools\cloud-context\Build-CloudContext.ps1" -ForegroundColor DarkGray
+    }
+
     $restoreCommand = "Import-Module CloudContext; Restore-CloudProfile; Enable-CloudProfilePrompt"
     foreach ($profileDirectoryName in @("WindowsPowerShell", "PowerShell")) {
         $profileDirectory = Join-Path $documents $profileDirectoryName

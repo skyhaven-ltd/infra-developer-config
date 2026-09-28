@@ -17,44 +17,56 @@ Build the standalone executable with the .NET 10 SDK:
 
 Open `tools\cloud-context\dist\win-x64\CloudContext.exe`. This single file
 includes the .NET runtime; Azure CLI must be installed and available on PATH.
-You can copy the executable elsewhere. Profiles and credentials remain under
-`~/.config/cloud-context`, or the directory set by `CLOUD_CONTEXT_HOME`.
-Use `-Runtime win-arm64` when building for Windows on ARM.
+After a build, `.\scripts\Install-DeveloperConfig.ps1` adds a **Cloud Context**
+Start menu shortcut; right-click the running app's taskbar button to pin it.
+Profiles and credentials stay under `~/.config/cloud-context`, or the directory
+set by `CLOUD_CONTEXT_HOME`. Use `-Runtime win-arm64` when building for Windows on ARM.
 
-1. Click **New environment**, enter a profile name and directory (tenant) ID.
-2. Enter a subscription ID for Azure resources, a Dataverse environment URL,
-   or both. GitHub configuration is not required. For Dataverse-only access,
-   the subscription can be blank.
-3. Click **Connect**. The app checks the cached session first, then opens the
-   native Microsoft sign-in flow if needed. **Sign in again** forces login;
-   **Use device-code sign-in** displays the code in the app's output area.
-4. After a tenant-only login, **Load subscriptions** lists cached subscriptions
-   in that tenant. Choose an ID, save, and connect to select it.
-5. Use **Copy Codex instructions** for commands using the installed
-   `cloud-profile` launcher, or **Open PowerShell** for a new shell with the
-   chosen Azure cache and `DATAVERSE_URL` already configured.
+1. Click **New profile**, then enter a profile name and tenant ID.
+2. Add a subscription ID for Azure resources, a Dataverse environment URL, or
+   both. For Dataverse-only access, leave the subscription blank.
+3. Click **Sign in**. If the saved sign-in still works, nothing opens.
+   Otherwise a new incognito Chrome window opens on the Microsoft sign-in page.
+   **More > Sign in with a code** copies a device code to the clipboard and
+   opens the code page in the same kind of window.
+4. After signing in, the app lists the tenant's subscriptions in the
+   **Subscription** box. Pick one and click **Save changes**.
+5. **More** also has **Copy instructions for an agent**, for the installed
+   `cloud-profile` launcher, and **Open PowerShell with this profile**, which
+   opens a shell with the profile's Azure cache and `DATAVERSE_URL` set.
 
-Existing terminals retain their context. The app does not change their process
+The dot next to each profile shows its last known state: green when signed in,
+red when it needs a sign-in, grey when it hasn't been checked. The app saves
+these results in `status.json`, so they're there when you switch profiles or
+reopen the app. It re-checks every profile silently at startup and every
+10 minutes. These checks only use saved tokens and never open a browser.
+Drag the divider to widen the profile list; the app remembers the width.
+
+Right-click a profile (or press Delete) to remove it. Removal deletes the
+profile and its saved Azure and GitHub sign-ins in `~/.config/cloud-context/cli/`
+after you confirm. **Sign out** clears the saved sign-in but keeps the profile.
+
+Sign-ins from the GUI, `Connect-CloudProfile` and the `cloud-profile` launcher
+turn off the Windows account broker (`AZURE_CORE_ENABLE_BROKER_ON_WINDOWS=false`),
+whose dialog tends to open behind other windows. They point `BROWSER` and
+`GH_BROWSER` at Chrome with `--incognito --new-window`. If Chrome isn't
+installed, the default browser opens instead. Incognito windows share one
+session while any of them is open, so close them all to start a clean sign-in.
+
+Existing terminals keep their context. The app doesn't change their
 environment or overwrite the default Azure CLI cache. Editing a saved profile
-preserves its GitHub and other metadata. The GUI supports the Azure public
-cloud and Dataverse through `az rest`; it does not configure `pac` authentication.
+keeps its GitHub and other metadata. The GUI supports the Azure public cloud,
+and Dataverse through `az rest`; it doesn't configure `pac` authentication.
 
-The app verifies Azure tenant/subscription identity and token acquisition.
-For Dataverse it also makes a read-only `WhoAmI` request to verify environment
-access. An Azure token check alone does not prove resource-level RBAC access.
+A check verifies the Azure tenant and subscription and gets a token. For
+Dataverse it also makes a read-only `WhoAmI` request. An Azure token check
+alone doesn't prove resource-level RBAC access.
 
-**Check access / expiry** displays the selected resource's access-token expiry
-in local time and a live countdown. It also shows the exact Azure CLI cache
-directory and lists token/MSAL cache files found there, without reading or
-displaying their contents. Windows broker authentication may additionally use
-the Windows-managed account store.
-
-An access-token countdown is not a countdown to the next login: Azure CLI can
-silently renew access tokens using its cached session. Checking expiry may
-renew a token. The longer session's remaining lifetime is not exposed reliably;
-MFA, revocation and tenant policies can require another sign-in. The countdown
-is a snapshot and is refreshed by connecting or checking access. Azure CLI
-2.54 or newer is required for the `expires_on` timestamp.
+The status shows when the current access token expires. That isn't when you'll
+next have to sign in: Azure CLI renews access tokens silently from the saved
+session, and each check may renew one. Azure CLI doesn't reliably expose how
+long the session itself lasts, and MFA, revocation or tenant policy can force
+another sign-in. Azure CLI 2.54 or newer is required for the expiry time.
 
 See Microsoft's [interactive Azure CLI authentication documentation](https://learn.microsoft.com/en-us/cli/azure/authenticate-azure-cli-interactively)
 for broker, device-code and refresh-token behavior.
