@@ -140,6 +140,19 @@ function Set-CloudProfileEnvironment {
     $env:DATAVERSE_URL = if ($Profile.PSObject.Properties.Name -contains "dataverseUrl") { $Profile.dataverseUrl } else { "" }
 }
 
+function Get-CloudSignInEnvironment {
+    $environment = @{ AZURE_CORE_ENABLE_BROKER_ON_WINDOWS = "false" }
+    $chrome = foreach ($hive in @("HKCU:", "HKLM:")) {
+        $path = (Get-ItemProperty -LiteralPath "$hive\Software\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction SilentlyContinue).'(default)'
+        if ($path -and (Test-Path -LiteralPath $path.Trim('"') -PathType Leaf)) { $path.Trim('"'); break }
+    }
+    if ($chrome) {
+        $environment.BROWSER = "'$chrome' --incognito --new-window %s"
+        $environment.GH_BROWSER = "'$chrome' --incognito --new-window"
+    }
+    return $environment
+}
+
 function Use-CloudProfile {
     [CmdletBinding()]
     param(
@@ -283,26 +296,38 @@ function Connect-CloudProfile {
         throw "No cloud profile is active. Run Use-CloudProfile <name> first."
     }
     $profile = Get-CloudProfile -Name $env:CLOUD_PROFILE
-
-    if (-not $GitHubOnly) {
-        $loginArguments = @("login", "--tenant", $profile.azureTenantId, "--allow-no-subscriptions")
-        if (($profile.PSObject.Properties.Name -contains "dataverseUrl") -and $profile.dataverseUrl) {
-            $loginArguments += @("--scope", "$($profile.dataverseUrl)/.default")
-        }
-        & az @loginArguments
-        if ($LASTEXITCODE -ne 0) { throw "Azure CLI login failed." }
-        if ($profile.azureSubscriptionId) {
-            & az account set --subscription $profile.azureSubscriptionId
-            if ($LASTEXITCODE -ne 0) { throw "Unable to select Azure subscription '$($profile.azureSubscriptionId)'." }
-        }
+    $signInEnvironment = Get-CloudSignInEnvironment
+    $previousEnvironment = @{}
+    foreach ($name in $signInEnvironment.Keys) {
+        $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+        [Environment]::SetEnvironmentVariable($name, $signInEnvironment[$name])
     }
 
-    if ($GitHubOnly -and -not $profile.githubUser) {
-        throw "This profile does not have GitHub configured."
-    }
-    if (-not $AzureOnly -and $profile.githubUser) {
-        & gh auth login --hostname $profile.githubHost
-        if ($LASTEXITCODE -ne 0) { throw "GitHub CLI login failed." }
+    try {
+        if (-not $GitHubOnly) {
+            $loginArguments = @("login", "--tenant", $profile.azureTenantId, "--allow-no-subscriptions")
+            if (($profile.PSObject.Properties.Name -contains "dataverseUrl") -and $profile.dataverseUrl) {
+                $loginArguments += @("--scope", "$($profile.dataverseUrl)/.default")
+            }
+            & az @loginArguments
+            if ($LASTEXITCODE -ne 0) { throw "Azure CLI login failed." }
+            if ($profile.azureSubscriptionId) {
+                & az account set --subscription $profile.azureSubscriptionId
+                if ($LASTEXITCODE -ne 0) { throw "Unable to select Azure subscription '$($profile.azureSubscriptionId)'." }
+            }
+        }
+
+        if ($GitHubOnly -and -not $profile.githubUser) {
+            throw "This profile does not have GitHub configured."
+        }
+        if (-not $AzureOnly -and $profile.githubUser) {
+            & gh auth login --hostname $profile.githubHost --web
+            if ($LASTEXITCODE -ne 0) { throw "GitHub CLI login failed." }
+        }
+    } finally {
+        foreach ($name in $previousEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $previousEnvironment[$name])
+        }
     }
 
     Assert-CloudContext -AzureOnly:$AzureOnly -GitHubOnly:$GitHubOnly | Out-Null

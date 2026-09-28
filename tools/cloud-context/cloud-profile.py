@@ -48,6 +48,23 @@ def get_profile(root: Path, name: str) -> dict[str, Any]:
     raise CloudProfileError(f"cloud profile '{name}' does not exist")
 
 
+def chrome_path() -> str | None:
+    if sys.platform == "win32":
+        import winreg
+
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                with winreg.OpenKey(
+                    hive, r"Software\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"
+                ) as key:
+                    path = str(winreg.QueryValue(key, None)).strip('"')
+            except OSError:
+                continue
+            if Path(path).is_file():
+                return path
+    return shutil.which("chrome") or shutil.which("google-chrome")
+
+
 def profile_environment(
     root: Path, profile: dict[str, Any], base: dict[str, str]
 ) -> dict[str, str]:
@@ -82,8 +99,13 @@ def profile_environment(
             "GH_HOST": str(profile.get("githubHost", "github.com")),
             "GH_ORG": str(profile.get("githubOrg", "")),
             "DATAVERSE_URL": str(profile.get("dataverseUrl", "")),
+            "AZURE_CORE_ENABLE_BROKER_ON_WINDOWS": "false",
         }
     )
+    chrome = chrome_path()
+    if chrome:
+        environment["BROWSER"] = f"'{chrome}' --incognito --new-window %s"
+        environment["GH_BROWSER"] = f"'{chrome}' --incognito --new-window"
     return environment
 
 

@@ -37,6 +37,19 @@ class CloudProfileTests(unittest.TestCase):
         self.assertTrue(environment["AZURE_CONFIG_DIR"].endswith("customer-prod"))
         self.assertTrue(environment["GH_CONFIG_DIR"].endswith("customer-prod"))
         self.assertEqual(environment["EXISTING"], "value")
+        self.assertEqual(environment["AZURE_CORE_ENABLE_BROKER_ON_WINDOWS"], "false")
+
+    def test_sign_in_uses_incognito_chrome(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(cloud_profile, "chrome_path", return_value="C:/Chrome/chrome.exe"),
+        ):
+            environment = cloud_profile.profile_environment(Path(directory), self.profile(), {})
+
+        self.assertEqual(
+            environment["BROWSER"], "'C:/Chrome/chrome.exe' --incognito --new-window %s"
+        )
+        self.assertEqual(environment["GH_BROWSER"], "'C:/Chrome/chrome.exe' --incognito --new-window")
 
     def test_main_executes_with_named_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
