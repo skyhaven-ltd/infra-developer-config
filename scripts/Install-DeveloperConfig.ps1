@@ -196,6 +196,25 @@ function Install-CloudContext {
     }
 }
 
+function Install-Evergreen {
+    param([string]$Source)
+
+    $executable = Join-Path $Source "dist\Evergreen.exe"
+    $inputs = Get-ChildItem -LiteralPath $Source -File | Where-Object { $_.Extension -in ".cs", ".ico" }
+    if (-not (Test-Path -LiteralPath $executable -PathType Leaf) -or
+        ($inputs | Where-Object { $_.LastWriteTimeUtc -gt (Get-Item -LiteralPath $executable).LastWriteTimeUtc })) {
+        & (Join-Path $Source "Build-Evergreen.ps1")
+    }
+
+    $shortcutPath = Join-Path ([Environment]::GetFolderPath("Programs")) "Evergreen.lnk"
+    $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
+    $shortcut.TargetPath = $executable
+    $shortcut.WorkingDirectory = Split-Path -Parent $executable
+    $shortcut.Description = "Keep Teams presence green while idle"
+    $shortcut.Save()
+    Write-Host "  [shortcut] $shortcutPath -> $executable" -ForegroundColor Green
+}
+
 function ConvertTo-ComparablePath {
     param([string]$Path)
     try {
@@ -1022,6 +1041,11 @@ Install-CloudContext $Repo
 
 Write-Host "`nGit" -ForegroundColor Cyan
 Install-GitClear "$Repo\tools\git-clear"
+
+# -- Evergreen ---------------------------------------------------------------
+
+Write-Host "`nEvergreen" -ForegroundColor Cyan
+Install-Evergreen "$Repo\tools\evergreen"
 
 # -- Done ------------------------------------------------------------------
 
