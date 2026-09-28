@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>CloudContext</AssemblyName>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ApplicationIcon>CloudContext.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />

@@ -1,5 +1,8 @@
 using System.Diagnostics;
+using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace CloudContext;
 
@@ -15,202 +18,474 @@ internal static class Program
 
 internal sealed class MainForm : Form
 {
+    private static readonly Color Green = Color.FromArgb(22, 163, 74);
+    private static readonly Color Red = Color.FromArgb(220, 38, 38);
+    private static readonly Color Amber = Color.FromArgb(217, 119, 6);
+    private static readonly Color Grey = Color.FromArgb(156, 163, 175);
+    private static readonly Regex GuidPattern = new(@"[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}");
+
     private readonly ContextStore store = new(ContextStore.DefaultRoot);
-    private readonly ListBox profiles = new() { Dock = DockStyle.Fill, DisplayMember = "Name" };
-    private readonly TextBox name = new() { Dock = DockStyle.Fill };
-    private readonly TextBox tenant = new() { Dock = DockStyle.Fill };
-    private readonly ComboBox subscription = new() { Dock = DockStyle.Fill };
-    private readonly TextBox dataverse = new() { Dock = DockStyle.Fill, PlaceholderText = "https://your-org.crm11.dynamics.com" };
-    private readonly CheckBox deviceCode = new() { Text = "Use device-code sign-in", AutoSize = true };
-    private readonly TextBox cache = new() { ReadOnly = true, Dock = DockStyle.Fill };
-    private readonly Label expiry = new() { AutoSize = true, MaximumSize = new Size(660, 0) };
-    private readonly TextBox log = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill };
-    private readonly FlowLayoutPanel actions = new() { AutoSize = true, Dock = DockStyle.Fill };
-    private readonly Button cancel = new() { Text = "Cancel", AutoSize = true, Enabled = false };
-    private readonly System.Windows.Forms.Timer timer = new() { Interval = 1000 };
     private readonly AzureCli cli;
+    private readonly SplitContainer split = new() { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1, SplitterWidth = 6 };
+    private readonly ListBox profiles = new()
+    {
+        Dock = DockStyle.Fill, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 32, IntegralHeight = false,
+        BorderStyle = BorderStyle.None, DisplayMember = "Name"
+    };
+    private readonly Button newButton = new() { Text = "+ New profile", AutoSize = true, Dock = DockStyle.Fill };
+    private readonly ContextMenuStrip profileMenu = new();
+    private readonly ToolTip tip = new();
+    private readonly Label title = new() { AutoSize = true, Font = new Font("Segoe UI Semibold", 16), Margin = new Padding(0, 0, 0, 6) };
+    private readonly Label dot = new() { Text = "●", AutoSize = true, Font = new Font("Segoe UI", 13), Margin = new Padding(0, 0, 4, 0) };
+    private readonly Label status = new() { AutoSize = true, MaximumSize = new Size(640, 0), Margin = new Padding(0, 5, 0, 0) };
+    private readonly Label notice = new() { AutoSize = true, MaximumSize = new Size(640, 0), Margin = new Padding(0, 4, 0, 8) };
+    private readonly Button signIn = new() { AutoSize = true, Font = new Font("Segoe UI Semibold", 10) };
+    private readonly Button signOut = new() { Text = "Sign out", AutoSize = true };
+    private readonly Button more = new() { Text = "More ▾", AutoSize = true };
+    private readonly Button cancel = new() { Text = "Cancel", AutoSize = true, Visible = false };
+    private readonly ContextMenuStrip moreMenu = new();
+    private readonly TextBox name = new() { Dock = DockStyle.Fill };
+    private readonly TextBox tenant = new() { Dock = DockStyle.Fill, PlaceholderText = "00000000-0000-0000-0000-000000000000" };
+    private readonly ComboBox subscription = new() { Dock = DockStyle.Fill };
+    private readonly TextBox dataverse = new() { Dock = DockStyle.Fill, PlaceholderText = "https://your-org.crm11.dynamics.com (optional)" };
+    private readonly Button save = new() { Text = "Save changes", AutoSize = true, Anchor = AnchorStyles.Left };
+    private readonly LinkLabel logToggle = new() { Text = "Show activity", AutoSize = true, Margin = new Padding(0, 12, 0, 4) };
+    private readonly TextBox log = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Visible = false };
+    private readonly System.Windows.Forms.Timer clock = new() { Interval = 1000 };
+    private readonly System.Windows.Forms.Timer refreshTimer = new() { Interval = 10 * 60 * 1000 };
+    private readonly CancellationTokenSource closing = new();
+    private Dictionary<string, ProfileStatus> statuses;
     private CancellationTokenSource? operation;
+    private Task refreshing = Task.CompletedTask;
     private Profile? selected;
-    private DateTimeOffset? expiresAt;
+    private string? checking;
+    private string? busyProfile;
+    private string busyText = "";
+    private string? hovered;
+
+    [DllImport("user32.dll")]
+    private static extern bool AllowSetForegroundWindow(int processId);
 
     public MainForm()
     {
         cli = new AzureCli(store);
-        Text = "Cloud Context — Azure & Dataverse";
+        statuses = store.Statuses();
+        Text = "Cloud Context";
         Font = new Font("Segoe UI", 10);
-        Size = new Size(1120, 760);
-        MinimumSize = new Size(960, 680);
+        Size = new Size(1080, 720);
+        MinimumSize = new Size(760, 520);
         StartPosition = FormStartPosition.CenterScreen;
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(18), ColumnCount = 2, RowCount = 1 };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        var sidebar = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(0, 0, 16, 0) };
+        try { Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!); } catch (Exception) { }
+
+        var sidebar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(12, 16, 4, 12) };
         sidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         sidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         sidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        sidebar.Controls.Add(new Label { Text = "Saved environments", AutoSize = true }, 0, 0);
+        sidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        sidebar.Controls.Add(new Label { Text = "Profiles", AutoSize = true, Font = new Font("Segoe UI Semibold", 10), Margin = new Padding(3, 0, 3, 6) }, 0, 0);
         sidebar.Controls.Add(profiles, 0, 1);
-        var newButton = new Button { Text = "New environment", AutoSize = true };
-        newButton.Click += (_, _) => { profiles.ClearSelected(); LoadProfile(null); };
-        sidebar.Controls.Add(newButton, 0, 2);
-        layout.Controls.Add(sidebar, 0, 0);
-        var detail = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 15 };
-        for (var row = 0; row < 14; row++) detail.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        detail.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        detail.Controls.Add(new Label { Text = "Choose an environment. Keep its sign-in ready for your local CLI.", AutoSize = true }, 0, 0);
-        AddField(detail, "Profile name", name, 1);
-        AddField(detail, "Directory (tenant) ID", tenant, 3);
-        AddField(detail, "Subscription ID (optional for Dataverse / tenant-only access)", subscription, 5);
-        AddField(detail, "Dataverse environment URL (optional)", dataverse, 7);
-        detail.Controls.Add(deviceCode, 0, 9);
-        AddAction("Save", () => { Save(); return Task.CompletedTask; });
-        AddAction("Connect", () => Connect(false));
-        AddAction("Sign in again", () => Connect(true));
-        AddAction("Check access / expiry", Check);
-        AddAction("Load subscriptions", LoadSubscriptions);
-        AddAction("Copy Codex instructions", CopyInstructions);
-        AddAction("Open PowerShell", OpenShell);
-        detail.Controls.Add(actions, 0, 10);
-        detail.Controls.Add(new Label { Text = "Azure CLI credential-cache directory (separate for each profile)", AutoSize = true }, 0, 11);
-        detail.Controls.Add(cache, 0, 12);
-        var status = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, Dock = DockStyle.Fill };
-        status.Controls.Add(expiry);
-        status.Controls.Add(new Label { Text = "Access tokens can renew silently. Sign-in session expiry depends on tenant policy and is not exposed.", AutoSize = true, MaximumSize = new Size(660, 0) });
-        status.Controls.Add(cancel);
-        detail.Controls.Add(status, 0, 13);
-        detail.Controls.Add(log, 0, 14);
-        layout.Controls.Add(detail, 1, 0);
-        Controls.Add(layout);
-        profiles.SelectedIndexChanged += (_, _) => LoadProfile(profiles.SelectedItem as Profile);
-        cancel.Click += (_, _) => operation?.Cancel();
-        FormClosing += (_, _) => operation?.Cancel();
-        timer.Tick += (_, _) => UpdateExpiry();
-        foreach (Control field in new Control[] { name, tenant, subscription, dataverse })
-            field.TextChanged += (_, _) => { expiresAt = null; UpdateExpiry(); };
-        timer.Start();
-        Shown += (_, _) => { try { Reload(); } catch (Exception error) { Append(error.Message); } };
-        UpdateExpiry();
-    }
-
-    private static void AddField(TableLayoutPanel panel, string label, Control control, int row)
-    {
-        panel.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(3, 10, 3, 3) }, 0, row);
-        panel.Controls.Add(control, 0, row + 1);
-    }
-
-    private void AddAction(string text, Func<Task> action)
-    {
-        var button = new Button { Text = text, AutoSize = true };
-        button.Click += async (_, _) =>
+        var legend = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 6, 0, 6) };
+        foreach (var (colour, meaning) in new[] { (Green, "signed in"), (Red, "needs sign-in"), (Amber, "checking"), (Grey, "not checked") })
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-            operation = source;
-            SetBusy(true);
-            try { await action(); }
-            catch (OperationCanceledException) { Append("Operation cancelled or timed out. Check access before retrying."); expiresAt = null; }
-            catch (Exception error) { Append(error.Message); expiresAt = null; }
-            finally { operation = null; if (!IsDisposed) { SetBusy(false); UpdateExpiry(); } }
+            var entry = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 8, 0) };
+            entry.Controls.Add(new Label { Text = "●", ForeColor = colour, AutoSize = true, Font = new Font("Segoe UI", 8), Margin = new Padding(0) });
+            entry.Controls.Add(new Label { Text = meaning, ForeColor = SystemColors.GrayText, AutoSize = true, Font = new Font("Segoe UI", 8), Margin = new Padding(0) });
+            legend.Controls.Add(entry);
+        }
+        sidebar.Controls.Add(legend, 0, 2);
+        sidebar.Controls.Add(newButton, 0, 3);
+        split.Panel1.Controls.Add(sidebar);
+
+        var header = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Fill };
+        header.Controls.Add(dot);
+        header.Controls.Add(status);
+        var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 10, 0, 0) };
+        buttons.Controls.AddRange([signIn, signOut, more, cancel]);
+        var fields = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 2, Margin = new Padding(0, 8, 0, 0) };
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        AddField(fields, "Profile name", name);
+        AddField(fields, "Tenant ID", tenant);
+        AddField(fields, "Subscription", subscription);
+        AddField(fields, "Dataverse URL", dataverse);
+        fields.Controls.Add(new Label(), 0, fields.RowCount);
+        fields.Controls.Add(save, 1, fields.RowCount++);
+        var detail = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7, Padding = new Padding(20, 16, 20, 16) };
+        for (var row = 0; row < 6; row++) detail.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        detail.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        detail.Controls.Add(title, 0, 0);
+        detail.Controls.Add(header, 0, 1);
+        detail.Controls.Add(buttons, 0, 2);
+        detail.Controls.Add(notice, 0, 3);
+        detail.Controls.Add(fields, 0, 4);
+        detail.Controls.Add(logToggle, 0, 5);
+        detail.Controls.Add(log, 0, 6);
+        split.Panel2.Controls.Add(detail);
+        Controls.Add(split);
+
+        profileMenu.Items.Add("Sign in", null, (_, _) => SignIn(false));
+        profileMenu.Items.Add("Check now", null, (_, _) => RunAction("Checking sign-in...", CheckNow));
+        profileMenu.Items.Add(new ToolStripSeparator());
+        profileMenu.Items.Add("Remove...", null, (_, _) => RemoveSelected());
+        moreMenu.Items.Add("Sign in with a code", null, (_, _) => SignIn(true));
+        moreMenu.Items.Add("Check now", null, (_, _) => RunAction("Checking sign-in...", CheckNow));
+        moreMenu.Items.Add("Load subscriptions", null, (_, _) => RunAction("Loading subscriptions...", token => LoadSubscriptions(false, token)));
+        moreMenu.Items.Add(new ToolStripSeparator());
+        moreMenu.Items.Add("Copy instructions for an agent", null, (_, _) => RunAction("", _ => CopyInstructions()));
+        moreMenu.Items.Add("Open PowerShell with this profile", null, (_, _) => RunAction("", _ => OpenShell()));
+        moreMenu.Items.Add(new ToolStripSeparator());
+        moreMenu.Items.Add("Remove profile...", null, (_, _) => RemoveSelected());
+
+        profiles.DrawItem += DrawProfile;
+        profiles.Resize += (_, _) => profiles.Invalidate();
+        profiles.SelectedIndexChanged += (_, _) => LoadProfile(profiles.SelectedItem as Profile);
+        profiles.MouseDown += (_, e) =>
+        {
+            if (e.Button != MouseButtons.Right || operation != null) return;
+            var index = profiles.IndexFromPoint(e.Location);
+            if (index < 0) return;
+            profiles.SelectedIndex = index;
+            profileMenu.Show(profiles, e.Location);
         };
-        actions.Controls.Add(button);
+        profiles.MouseMove += (_, e) =>
+        {
+            var index = profiles.IndexFromPoint(e.Location);
+            var item = index >= 0 ? (Profile)profiles.Items[index] : null;
+            if (item?.Name == hovered) return;
+            hovered = item?.Name;
+            tip.SetToolTip(profiles, item == null ? "" : item.Name + ": " + Describe(item.Name).Text);
+        };
+        profiles.KeyDown += (_, e) => { if (e.KeyCode == Keys.Delete) RemoveSelected(); };
+        newButton.Click += (_, _) => { profiles.ClearSelected(); LoadProfile(null); name.Focus(); };
+        signIn.Click += (_, _) => SignIn(false);
+        signOut.Click += (_, _) => RunAction("Signing out...", SignOut);
+        more.Click += (_, _) => moreMenu.Show(more, new Point(0, more.Height));
+        cancel.Click += (_, _) => operation?.Cancel();
+        save.Click += (_, _) => RunAction("", _ => { Save(); return Task.CompletedTask; });
+        logToggle.LinkClicked += (_, _) => ShowLog(!log.Visible);
+        foreach (Control field in new Control[] { name, tenant, subscription, dataverse })
+            field.TextChanged += (_, _) => UpdateButtons();
+        clock.Tick += (_, _) => UpdateStatus();
+        refreshTimer.Tick += (_, _) => StartRefresh();
+        Shown += (_, _) =>
+        {
+            split.Panel1MinSize = 160;
+            split.SplitterDistance = Math.Clamp(store.SidebarWidth() ?? 300, 160, Math.Max(160, ClientSize.Width - 480));
+            try { Reload(); } catch (Exception error) { Notify(error.Message, true); }
+            if (profiles.Items.Count > 0) profiles.SelectedIndex = 0;
+            clock.Start();
+            refreshTimer.Start();
+            StartRefresh();
+        };
+        FormClosing += (_, _) =>
+        {
+            closing.Cancel();
+            operation?.Cancel();
+            try { store.SaveSidebarWidth(split.SplitterDistance); } catch (IOException) { }
+        };
+        LoadProfile(null);
     }
 
-    private void SetBusy(bool busy)
+    private static void AddField(TableLayoutPanel panel, string label, Control control)
     {
-        actions.Enabled = profiles.Enabled = name.Enabled = tenant.Enabled = subscription.Enabled = dataverse.Enabled = deviceCode.Enabled = !busy;
-        foreach (Control control in profiles.Parent!.Controls) if (control is Button) control.Enabled = !busy;
-        cancel.Enabled = busy;
-        UseWaitCursor = busy;
+        panel.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 8, 16, 8) }, 0, panel.RowCount);
+        control.Margin = new Padding(0, 6, 0, 6);
+        panel.Controls.Add(control, 1, panel.RowCount++);
+    }
+
+    private void DrawProfile(object? sender, DrawItemEventArgs e)
+    {
+        e.DrawBackground();
+        if (e.Index < 0) return;
+        var profile = (Profile)profiles.Items[e.Index];
+        var bullet = new Rectangle(e.Bounds.X + 8, e.Bounds.Y + (e.Bounds.Height - 10) / 2, 10, 10);
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using (var brush = new SolidBrush(Describe(profile.Name).Color)) e.Graphics.FillEllipse(brush, bullet);
+        var text = new Rectangle(bullet.Right + 8, e.Bounds.Y, e.Bounds.Right - bullet.Right - 12, e.Bounds.Height);
+        var colour = (e.State & DrawItemState.Selected) != 0 ? SystemColors.HighlightText : SystemColors.ControlText;
+        TextRenderer.DrawText(e.Graphics, profile.Name, e.Font, text, colour,
+            TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        e.DrawFocusRectangle();
+    }
+
+    private (Color Color, string Text) Describe(string profile)
+    {
+        if (profile == busyProfile && busyText.Length > 0) return (Amber, busyText);
+        if (profile == checking) return (Amber, "Checking sign-in...");
+        if (!statuses.TryGetValue(profile, out var saved)) return (Grey, "Not checked yet.");
+        var checkedAt = " Checked " + Ago(DateTimeOffset.FromUnixTimeSeconds(saved.CheckedAt)) + ".";
+        if (saved.State == ProfileStatus.SignedOut) return (Grey, "Signed out." + checkedAt);
+        if (saved.State != ProfileStatus.Ready)
+            return (Red, "Sign-in needed. " + FirstLine(saved.Message) + checkedAt);
+        var expires = DateTimeOffset.FromUnixTimeSeconds(saved.ExpiresOn ?? 0);
+        var left = expires - DateTimeOffset.Now;
+        if (left <= TimeSpan.Zero)
+            return (Amber, $"Signed in, but the access token expired at {expires.LocalDateTime:HH:mm}. It renews silently at the next check." + checkedAt);
+        return (Green, $"Signed in. Access token valid until {expires.LocalDateTime:HH:mm} ({Span(left)} left)." + checkedAt);
+    }
+
+    private static string FirstLine(string text)
+    {
+        var line = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
+        if (line.StartsWith("ERROR: ", StringComparison.Ordinal)) line = line[7..];
+        return line.Length > 180 ? line[..180] + "..." : line;
+    }
+
+    private static string Span(TimeSpan span) => span.TotalHours >= 1 ? $"{(int)span.TotalHours}h {span.Minutes}m" : $"{span.Minutes}m {span.Seconds}s";
+
+    private static string Ago(DateTimeOffset time)
+    {
+        var span = DateTimeOffset.Now - time;
+        if (span < TimeSpan.FromMinutes(1)) return "just now";
+        if (span < TimeSpan.FromHours(1)) return $"{(int)span.TotalMinutes}m ago";
+        if (span < TimeSpan.FromDays(1)) return $"{(int)span.TotalHours}h ago";
+        return "on " + time.LocalDateTime.ToString("d MMM HH:mm");
+    }
+
+    private void UpdateStatus()
+    {
+        if (selected == null)
+        {
+            dot.ForeColor = Grey;
+            status.Text = "Enter a name and tenant ID, then sign in. Subscription and Dataverse URL are optional.";
+            return;
+        }
+        var (colour, text) = Describe(selected.Name);
+        dot.ForeColor = colour;
+        status.Text = text;
+    }
+
+    private void UpdateButtons()
+    {
+        var idle = operation == null;
+        var ready = selected != null && statuses.TryGetValue(selected.Name, out var saved) && saved.State == ProfileStatus.Ready;
+        signIn.Text = ready ? "Sign in again" : "Sign in";
+        signIn.Enabled = idle;
+        signOut.Enabled = idle && selected != null;
+        more.Enabled = idle;
+        foreach (ToolStripItem item in moreMenu.Items)
+            if (item.Text is "Check now" or "Load subscriptions" or "Remove profile...") item.Enabled = selected != null;
+        cancel.Visible = !idle;
+        save.Enabled = idle && (selected == null
+            ? name.Text.Length > 0 || tenant.Text.Length > 0
+            : SubscriptionId() != selected.Subscription || tenant.Text.Trim() != selected.Tenant
+                || dataverse.Text.Trim().TrimEnd('/') != selected.Dataverse);
+        profiles.Enabled = newButton.Enabled = name.Enabled = tenant.Enabled = subscription.Enabled = dataverse.Enabled = idle;
+        UseWaitCursor = !idle;
+    }
+
+    private void Notify(string text, bool error = false)
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired) { BeginInvoke(() => Notify(text, error)); return; }
+        notice.ForeColor = error ? Red : SystemColors.ControlText;
+        notice.Text = FirstLine(text);
+        Append(text);
     }
 
     private void Append(string text)
     {
         if (IsDisposed || Disposing) return;
         if (InvokeRequired) { BeginInvoke(() => Append(text)); return; }
-        log.AppendText(text + Environment.NewLine);
+        log.AppendText($"[{DateTime.Now:HH:mm:ss}] {text.Trim()}{Environment.NewLine}");
+    }
+
+    private void ShowLog(bool visible)
+    {
+        log.Visible = visible;
+        logToggle.Text = visible ? "Hide activity" : "Show activity";
     }
 
     private void Reload(string? select = null)
     {
-        profiles.DataSource = store.Profiles();
+        var list = store.Profiles();
+        profiles.DataSource = list;
         profiles.SelectedIndex = -1;
-        if (select != null)
-            profiles.SelectedItem = ((List<Profile>)profiles.DataSource).FirstOrDefault(item => item.Name == select);
+        if (select != null) profiles.SelectedItem = list.FirstOrDefault(item => item.Name == select);
     }
 
     private void LoadProfile(Profile? profile)
     {
         selected = profile;
+        title.Text = profile?.Name ?? "New profile";
         name.Text = profile?.Name ?? "";
         name.ReadOnly = profile != null;
         tenant.Text = profile?.Tenant ?? "";
         subscription.Items.Clear();
         subscription.Text = profile?.Subscription ?? "";
         dataverse.Text = profile?.Dataverse ?? "";
-        cache.Text = profile == null ? "Save an environment to create its cache." : Path.Combine(store.Root, "cli", "azure", profile.Name);
-        expiresAt = null;
-        log.Clear();
-        UpdateExpiry();
+        notice.Text = "";
+        UpdateStatus();
+        UpdateButtons();
+    }
+
+    private string SubscriptionId()
+    {
+        var match = GuidPattern.Match(subscription.Text);
+        return match.Success ? match.Value : subscription.Text.Trim();
+    }
+
+    private void SetStatus(string profile, ProfileStatus value)
+    {
+        statuses[profile] = value;
+        try { store.SaveStatus(profile, value); } catch (IOException error) { Append("Couldn't save the status cache: " + error.Message); }
+        profiles.Invalidate();
+        UpdateStatus();
+        UpdateButtons();
+    }
+
+    private void StartRefresh()
+    {
+        if (!refreshing.IsCompleted || operation != null) return;
+        refreshing = RefreshAll();
+    }
+
+    private async Task RefreshAll()
+    {
+        try
+        {
+            foreach (var profile in store.Profiles())
+            {
+                if (operation != null || closing.IsCancellationRequested) return;
+                checking = profile.Name;
+                profiles.Invalidate();
+                UpdateStatus();
+                SetStatus(profile.Name, await cli.Status(profile, closing.Token));
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception error) { Append("Background check failed: " + error.Message); }
+        finally
+        {
+            checking = null;
+            if (!IsDisposed) { profiles.Invalidate(); UpdateStatus(); }
+        }
+    }
+
+    private async void RunAction(string text, Func<CancellationToken, Task> action)
+    {
+        if (operation != null) return;
+        using var source = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        operation = source;
+        busyProfile = selected?.Name ?? name.Text.Trim();
+        busyText = text;
+        notice.Text = "";
+        UpdateButtons();
+        UpdateStatus();
+        profiles.Invalidate();
+        try
+        {
+            await refreshing;
+            await action(source.Token);
+        }
+        catch (OperationCanceledException) { Notify("Stopped. Nothing else changed.", true); }
+        catch (Exception error) { Notify(error.Message, true); }
+        finally
+        {
+            operation = null;
+            busyProfile = null;
+            busyText = "";
+            if (!IsDisposed)
+            {
+                UpdateButtons();
+                UpdateStatus();
+                profiles.Invalidate();
+            }
+        }
+    }
+
+    private void SignIn(bool deviceCode)
+    {
+        var force = selected != null && statuses.TryGetValue(selected.Name, out var saved) && saved.State == ProfileStatus.Ready;
+        RunAction(deviceCode ? "Waiting for you to enter the code in Chrome..." : "Waiting for you to sign in. Use the Chrome window that just opened.", async token =>
+        {
+            var profile = Save();
+            AllowSetForegroundWindow(-1);
+            try
+            {
+                await cli.Connect(profile, force || deviceCode, deviceCode, Append, token, (url, code) => BeginInvoke(() =>
+                {
+                    Clipboard.SetText(code);
+                    Browser.Open(url);
+                    Notify($"Your sign-in code is {code}. It's on the clipboard, so paste it into the Chrome window.");
+                }));
+            }
+            catch (InvalidOperationException error)
+            {
+                SetStatus(profile.Name, ProfileStatus.Now(ProfileStatus.SignInNeeded, message: error.Message));
+                throw;
+            }
+            SetStatus(profile.Name, await cli.Status(profile, token));
+            Notify("Signed in. CLI commands can use this profile now.");
+            if (profile.Subscription.Length == 0) await LoadSubscriptions(true, token);
+        });
+    }
+
+    private async Task SignOut(CancellationToken token)
+    {
+        var profile = selected!;
+        await cli.SignOut(profile, token);
+        SetStatus(profile.Name, ProfileStatus.Now(ProfileStatus.SignedOut));
+        Notify($"Signed out of {profile.Name}. The profile settings are still saved.");
+    }
+
+    private async Task CheckNow(CancellationToken token)
+    {
+        var profile = Save();
+        var result = await cli.Status(profile, token);
+        SetStatus(profile.Name, result);
+        Notify(result.State == ProfileStatus.Ready ? "Sign-in works." : "Sign-in needed. " + FirstLine(result.Message), result.State != ProfileStatus.Ready);
+    }
+
+    private void RemoveSelected()
+    {
+        if (selected == null || operation != null) return;
+        var profile = selected;
+        var answer = MessageBox.Show(this,
+            $"Remove {profile.Name}?\n\nThis deletes the profile and its saved Azure and GitHub sign-ins on this computer. You can't undo this.",
+            "Remove profile", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        if (answer != DialogResult.Yes) return;
+        RunAction("Removing...", _ =>
+        {
+            store.Remove(profile.Name);
+            statuses.Remove(profile.Name);
+            Reload();
+            LoadProfile(null);
+            Notify($"Removed {profile.Name} and its saved sign-ins.");
+            return Task.CompletedTask;
+        });
     }
 
     private Profile Save()
     {
-        var profile = new Profile(name.Text.Trim(), tenant.Text.Trim(), subscription.Text.Trim(), dataverse.Text.Trim().TrimEnd('/'));
+        var profile = new Profile(name.Text.Trim(), tenant.Text.Trim(), SubscriptionId(), dataverse.Text.Trim().TrimEnd('/'));
+        if (profile == selected) return profile;
+        var subscriptions = subscription.Items.Cast<object>().ToArray();
         store.Save(profile, selected != null);
-        selected = profile;
         Reload(profile.Name);
-        Append("Saved " + profile.Name + ". Credentials remain in Azure CLI's native cache.");
+        subscription.Items.AddRange(subscriptions);
+        Notify($"Saved {profile.Name}.");
         return profile;
     }
 
-    private async Task Connect(bool force)
+    private async Task LoadSubscriptions(bool quiet, CancellationToken token)
     {
         var profile = Save();
-        await cli.Connect(profile, force, deviceCode.Checked, Append, operation!.Token);
-        await ShowExpiry(profile);
-    }
-
-    private async Task Check()
-    {
-        var profile = Save();
-        await cli.Check(profile, operation!.Token);
-        Append(profile.Dataverse.Length > 0 ? "Dataverse WhoAmI succeeded." : "Azure tenant, subscription and token verified.");
-        await ShowExpiry(profile);
-    }
-
-    private async Task ShowExpiry(Profile profile)
-    {
-        expiresAt = await cli.Expiry(profile, operation!.Token);
-        UpdateExpiry();
-        var files = Directory.GetFiles(cache.Text, "*", SearchOption.TopDirectoryOnly)
-            .Where(path => Path.GetFileName(path).Contains("token", StringComparison.OrdinalIgnoreCase)
-                || Path.GetFileName(path).Contains("msal", StringComparison.OrdinalIgnoreCase));
-        foreach (var file in files) Append("Cache file: " + file);
-        Append("Expiry checked for " + (profile.Dataverse.Length > 0 ? profile.Dataverse : "Azure Resource Manager") + ". Checking may silently renew an expired token.");
-    }
-
-    private void UpdateExpiry()
-    {
-        if (expiresAt == null) { expiry.Text = "Token expiry: not checked. Connect or check access to retrieve it."; return; }
-        var remaining = expiresAt.Value - DateTimeOffset.Now;
-        expiry.Text = $"Access token expires: {expiresAt.Value.LocalDateTime:yyyy-MM-dd HH:mm:ss} (local)\n"
-            + (remaining > TimeSpan.Zero ? $"Time remaining: {(int)remaining.TotalHours}h {remaining.Minutes}m {remaining.Seconds}s"
-                : "Access token expired. Check access to attempt silent renewal.");
-    }
-
-    private async Task LoadSubscriptions()
-    {
-        var profile = Save();
-        var result = JsonNode.Parse(await cli.Run(profile, ["account", "list", "--all", "--output", "json"], null, operation!.Token))!.AsArray();
+        var result = JsonNode.Parse(await cli.Run(profile, ["account", "list", "--all", "--output", "json"], null, token))!.AsArray();
+        var current = subscription.Text;
         subscription.Items.Clear();
         foreach (var account in result.Where(item => string.Equals((string?)item?["tenantId"], profile.Tenant, StringComparison.OrdinalIgnoreCase)))
+            subscription.Items.Add($"{account!["name"]} ({account["id"]})");
+        subscription.Text = current;
+        if (subscription.Items.Count > 0)
         {
-            subscription.Items.Add((string)account!["id"]!);
-            Append($"{account["name"]}: {account["id"]}");
+            Notify($"Found {subscription.Items.Count} subscription(s). Pick one from the Subscription list, then save.");
+            if (!quiet) subscription.DroppedDown = true;
         }
-        Append("Choose a subscription ID, save, then connect. Sign in first if no subscriptions are listed.");
+        else if (!quiet) Notify("No subscriptions found in this tenant. Sign in first, or leave Subscription blank for tenant-only access.");
     }
 
-    private Task CopyInstructions()
+    private Task CopyInstructions(CancellationToken _ = default)
     {
         var profile = Save();
         var command = profile.Dataverse.Length > 0
@@ -219,11 +494,11 @@ internal sealed class MainForm : Form
         Clipboard.SetText($"Use cloud profile '{profile.Name}'. Prefix every Azure CLI command with cloud-profile {profile.Name} --. "
             + $"Do not use a different CLI cache. Example: cloud-profile {profile.Name} -- {command}"
             + $"\nThe profile store is {store.Root}. Set CLOUD_CONTEXT_HOME to this path if your process uses a different location.");
-        Append("Copied instructions for Codex. The cloud-profile launcher must be installed on PATH.");
+        Notify("Copied agent instructions. They need the cloud-profile launcher on PATH.");
         return Task.CompletedTask;
     }
 
-    private Task OpenShell()
+    private Task OpenShell(CancellationToken _ = default)
     {
         var profile = Save();
         var info = new ProcessStartInfo("powershell.exe") { UseShellExecute = false };
@@ -231,13 +506,18 @@ internal sealed class MainForm : Form
         info.ArgumentList.Add("-NoExit");
         foreach (var pair in store.EnvironmentFor(profile)) info.Environment[pair.Key] = pair.Value;
         Process.Start(info)?.Dispose();
-        Append("Opened PowerShell with this environment. Existing terminals keep their previous context.");
+        Notify($"Opened PowerShell with {profile.Name}. Terminals that were already open keep their old profile.");
         return Task.CompletedTask;
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) timer.Dispose();
+        if (disposing)
+        {
+            clock.Dispose();
+            refreshTimer.Dispose();
+            closing.Dispose();
+        }
         base.Dispose(disposing);
     }
 }
