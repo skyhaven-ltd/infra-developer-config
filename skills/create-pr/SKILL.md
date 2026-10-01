@@ -19,7 +19,7 @@ Inspect these fields:
 - Stop if `on_default_branch` is true or `existing_pull_requests` is non-empty.
 - If `branch_prefix_unclear` appears in `risk_flags`, resolve the intended change type before proceeding. Branches must be prefixed `patch/`, `minor/`, or `major/`; do not silently rename an existing branch.
 - `branch_mapping.title_prefix` is derived from the branch type (`patch/foo` -> `[PATCH]`, `minor/foo` -> `[MINOR]`, `major/foo` -> `[MAJOR]`). The PR title must start with it.
-- `pull_request_template`: the shared template at `.github/.github/PULL_REQUEST_TEMPLATE/pull-request.md`. Do not invent or use embedded templates.
+- `pull_request_template`: the shared template fetched with authenticated `gh api` from `skyhaven-ltd/.github` at `.github/PULL_REQUEST_TEMPLATE/pull-request.md` on its default branch. Do not invent or use embedded templates. The helper reads the remote repository directly; no local clone of the shared repository is required. `gh` authentication is required for template retrieval even when creating an Azure DevOps PR.
 
 ## Step 2 — Draft and authorize
 

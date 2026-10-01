@@ -8,7 +8,7 @@ title/body from the diff, confirming the VCS when it cannot be inferred, and
 checking user authorization before the side-effecting ``apply`` command.
 """
 from __future__ import annotations
-import argparse, json, os, re, shutil, subprocess, sys
+import argparse, base64, json, os, re, shutil, subprocess, sys
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -100,8 +100,7 @@ def load_plan(path: str) -> dict[str, Any]:
 def require_approved(plan: dict[str, Any]):
     if plan.get('approved') is not True: raise SkillError('Plan must include approved=true after a user request to create the PR or approval of its draft')
 
-def parse_template(path: Path) -> dict[str,Any]:
-    text=path.read_text(encoding='utf-8')
+def parse_template(path: str, text: str) -> dict[str,Any]:
     meta: dict[str,str]={}; body=text
     if text.startswith('---\n'):
         _, fm, body = text.split('---\n', 2)
@@ -110,15 +109,14 @@ def parse_template(path: Path) -> dict[str,Any]:
                 k,v=line.split(':',1); meta[k.strip()]=v.strip().strip('"')
     return {'path':str(path),'frontmatter':meta,'body':body.strip()}
 
-def find_shared_template(start: Path, *parts: str) -> dict[str,Any]|None:
-    for parent in [start, *start.parents]:
-        for root in (parent, parent.parent):
-            candidate=root.joinpath('.github','.github',*parts)
-            if candidate.exists(): return parse_template(candidate)
-    return None
-
-def pull_request_template(start: Path) -> dict[str,Any]|None:
-    return find_shared_template(start,'PULL_REQUEST_TEMPLATE','pull-request.md')
+def pull_request_template(start: Path) -> dict[str,Any]:
+    gh=exe('gh')
+    if not gh: raise SkillError('gh is required to read the shared pull request template')
+    source='repos/skyhaven-ltd/.github/contents/.github/PULL_REQUEST_TEMPLATE/pull-request.md'
+    cp=run([gh,'api',source],cwd=start,check=True)
+    data=json.loads(cp.stdout)
+    text=base64.b64decode(data['content']).decode('utf-8')
+    return parse_template(data['html_url'],text)
 
 def branch_kind(branch: str) -> dict[str,str]|None:
     table=[(('major/',),'feature'),(('minor/','patch/'),'maintenance')]
@@ -214,7 +212,7 @@ def inspect(t: str, vcs_override: str|None) -> dict[str,Any]:
 
 def apply(t: str, plan_path: str, dry: bool) -> dict[str,Any]:
     p=target_dir(t); template=pull_request_template(p)
-    if not template: raise SkillError('Shared pull request template not found: .github/.github/PULL_REQUEST_TEMPLATE/pull-request.md')
+    if not template: raise SkillError('Shared remote pull request template is unavailable')
     plan=load_plan(plan_path); require_approved(plan)
     if not branch_kind(current_branch(p) or ''): raise SkillError('Branch must begin with patch/, minor/, or major/')
     vcs=resolve_vcs(p,plan.get('vcs'))
