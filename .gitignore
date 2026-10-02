@@ -43,3 +43,5 @@
 
 # Microsoft Foundry Skill
 skills/microsoft-foundry/**
+
+__pycache__/
