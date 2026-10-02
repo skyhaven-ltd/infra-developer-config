@@ -50,3 +50,7 @@ For a headless server, use an OS scheduler (Windows Task Scheduler or a Linux sy
 For a private server using your subscription, sign in there with `codex login --device-auth` when device-code login is enabled. `codex exec` reuses saved CLI authentication. ChatGPT login uses subscription access; API-key login uses separately billed API access. Scheduled execution must use the same account and an accessible credential store; do not put credentials in this repository. [Authentication and headless login](https://learn.chatgpt.com/docs/auth)
 
 For this setup, use one personal server for reliable unattended CLI tasks, or one awake desktop for app-managed tasks. Avoid scheduling the same maintenance task on every synced machine. No scheduled Codex task is installed by these changes.
+
+## Orca task phases
+
+Use the shared global instructions for supervised planning, implementation, and fresh review with private numbered `.claude` task folders. See [Orca task workflow](orca-task-workflow.md) for machine/project setup, authorized worker models, and the three session prompts. Project instruction files are not required; the existing global instruction links remain the source of policy.
