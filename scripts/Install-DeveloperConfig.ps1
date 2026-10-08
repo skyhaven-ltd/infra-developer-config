@@ -477,12 +477,10 @@ function Merge-ClaudeSettings {
         }
     }
 
-    # Hooks are fully managed by this repository. Remove previously installed
-    # hooks when the shared settings no longer define them.
+    # Shared hooks replace local hooks only when the shared settings define
+    # them; otherwise local hooks, such as Orca's, are preserved.
     if ($sourceSettings.PSObject.Properties.Name -contains "hooks") {
         $merged["hooks"] = $sourceSettings.hooks
-    } else {
-        $merged.Remove("hooks") | Out-Null
     }
 
     # Hook commands are not run through cmd, so %USERPROFILE% is never
