@@ -20,30 +20,18 @@
       "TaskOutput",
       "TaskStop",
       "mcp__ide__executeCode",
-      "mcp__ide__getDiagnostics",
-      "mcp__knowledge__memory_recall",
-      "mcp__knowledge__memory_get",
-      "mcp__knowledge__memory_upsert",
-      "mcp__knowledge__memory_mark"
+      "mcp__ide__getDiagnostics"
     ],
     "deny": []
   },
   "enabledPlugins": {
-    "caveman@caveman": true,
-    "frontend-design@claude-plugins-official": true,
-    "ponytail@ponytail": true
+    "agent-skills@addy-agent-skills": true
   },
   "extraKnownMarketplaces": {
-    "caveman": {
+    "addy-agent-skills": {
       "source": {
-        "source": "github",
-        "repo": "JuliusBrussee/caveman"
-      }
-    },
-    "ponytail": {
-      "source": {
-        "source": "github",
-        "repo": "DietrichGebert/ponytail"
+        "source": "git",
+        "url": "https://github.com/addyosmani/agent-skills.git"
       }
     }
   },

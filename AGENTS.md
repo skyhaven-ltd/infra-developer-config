@@ -13,12 +13,12 @@ Tracked in version control (enforced by `.gitignore`):
 | Path                                  | Tool                | Purpose                                                                                        |
 | ------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
 | `skills/`                             | Claude Code + Codex | Shared skill source; linked into `~/.claude/skills` and `~/.codex/skills/<name>`               |
-| `claude/settings.json`                | Claude Code         | Global tool permissions and model config                                                       |
+| `claude/settings.json`                | Claude Code         | Global tool permissions, plugins and model config                                              |
 | `system/SYSTEM.md`                    | Claude Code + Codex | Canonical global instructions installed under each tool's required filename                    |
 | `codex/config.toml`                   | Codex CLI           | Model, reasoning effort, options                                                               |
 | `scripts/Install-DeveloperConfig.ps1` | All                 | One-shot link creation for a new Windows machine; can install a per-user logon task for itself |
 | `scripts/Update-GitRepositories.ps1`  | Git                 | Pulls all repositories under a configurable root; can install a per-user logon task for itself |
-| `scripts/Test-DeveloperMachine.ps1` | All | Read-only CLI, authentication, config, skill and MCP checks |
+| `scripts/Test-DeveloperMachine.ps1` | All | Read-only CLI, authentication, config and skill checks |
 | `docs/`                               | â€”                   | Per-tool setup documentation                                                                   |
 
 Everything else in each tool's config directory (sessions, history, cache,
@@ -45,15 +45,9 @@ The body is the instruction prompt used by Claude or Codex when the skill is inv
 | Skill | Purpose |
 | --- | --- |
 | `buy-for-life` | Research durable products and UK value |
-| `create-pr` | Create GitHub or Azure DevOps pull requests |
-| `distill-knowledge` | Promote durable knowledge into Obsidian notes |
-| `generate-readme` | Generate a brief project README |
-| `git-commit-push` | Stage, commit and push with safety checks |
-| `handoff` | Save portable context for another machine or agent |
 | `humanizer` | Remove AI-writing patterns from text |
 | `negotiate-voss` | Draft negotiation and difficult-conversation messages |
-| `process-inbox` | Process Obsidian inbox captures |
-| `terraform-standards` | Apply house Terraform engineering standards |
+| `teach` | Teach a new skill or concept within the workspace |
 
 ## Common Tasks
 
@@ -81,7 +75,7 @@ back to file copies and prints a reminder â€” run `.\scripts\Install-Develo
 after each `git pull` to refresh the copies. An Administrator shell bypasses
 this restriction and produces true symlinks.
 
-See `docs/developer-workflow.md` for machine checks, portable handoffs,
+See `docs/developer-workflow.md` for machine checks, the agent workflow
 and scheduling options. The installer and machine sync target Windows.
 
 ### Installing user logon tasks
@@ -134,7 +128,7 @@ The `gh` CLI is not on the bash `PATH` by default. Use the full path:
 
 Defines globally allowed tools. When adding new MCP tool permissions, add them to the `allow` array. The `deny` array is currently empty â€” prefer allowlist-only control.
 
-Plugins (marketplace and official) are configured under `enabledPlugins` â€” these are not synced via git and must be installed per-device.
+The agent-skills plugin is enabled under `enabledPlugins` from the `addy-agent-skills` marketplace declared in `extraKnownMarketplaces`. The installer merges both into each Claude profile and adds the same plugin to Codex through the `codex` CLI.
 
 ## Code Style
 

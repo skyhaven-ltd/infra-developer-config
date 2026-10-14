@@ -8,8 +8,6 @@ import shutil
 import stat
 import subprocess
 import sys
-import time
-import urllib.request
 
 if sys.version_info < (3, 11):
     raise SystemExit("Python 3.11 or newer is required.")
@@ -78,7 +76,7 @@ def nested(config, key):
 
 def config_checks(shared, local):
     checks = []
-    for key in ("approval_policy", "sandbox_mode", "windows.sandbox", "notify", "mcp_servers.knowledge"):
+    for key in ("approval_policy", "sandbox_mode", "windows.sandbox", "notify"):
         if os.name != "nt" and key == "windows.sandbox":
             continue
         expected = nested(shared, key)
@@ -93,42 +91,6 @@ def config_checks(shared, local):
                              f"{actual} (local override preserved)." if actual and actual != shared.get(key)
                              else f"{actual or 'Unset; rerun installer to seed the shared default.'}"))
     return checks
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
-def mcp_check(server):
-    credential = os.environ.get(server.get("bearer_token_env_var", ""))
-    if not credential:
-        return result("Knowledge MCP", "FAIL", "Bearer-token environment variable is missing in this process; restart after configuring it.")
-    payload = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-        "protocolVersion": "2024-11-05", "capabilities": {},
-        "clientInfo": {"name": "developer-machine-check", "version": "1.0"}}}
-    request = urllib.request.Request(server["url"], data=json.dumps(payload).encode(), headers={
-        "Authorization": f"Bearer {credential}", "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream"})
-    try:
-        deadline = time.monotonic() + 10
-        with urllib.request.build_opener(NoRedirect()).open(request, timeout=10) as response:
-            if "text/event-stream" in response.headers.get("Content-Type", ""):
-                message = {}
-                for line in response:
-                    if time.monotonic() > deadline:
-                        break
-                    if line.startswith(b"data:"):
-                        message = json.loads(line[5:])
-                        if message.get("id") == 1:
-                            break
-            else:
-                message = json.load(response)
-        if "result" in message and "serverInfo" in message["result"]:
-            return result("Knowledge MCP", "PASS", "Authenticated MCP initialization succeeded.")
-        return result("Knowledge MCP", "FAIL", "Endpoint did not return a successful MCP initialization.")
-    except (OSError, ValueError):
-        return result("Knowledge MCP", "FAIL", "Connection or authentication failed; check network, endpoint and token.")
 
 
 def inspect(repo, user_root, codex_home, offline=False):
@@ -161,27 +123,18 @@ def inspect(repo, user_root, codex_home, offline=False):
             managed = (installed / ".managed-by-ops-developer-config").exists() or installed.resolve().is_relative_to((repo / "skills").resolve())
             if installed.name not in names and managed:
                 checks.append(result(f"{tool} stale skill {installed.name}", "WARN", "Removed from source; rerun installer to remove the managed entry."))
-    handoff = os.environ.get("AGENT_HANDOFF_DIR")
-    checks.append(result("Portable handoffs", "PASS" if handoff and Path(handoff).is_dir() else "WARN",
-                         "Directory exists; synchronization must be provided separately." if handoff and Path(handoff).is_dir()
-                         else "Set AGENT_HANDOFF_DIR to an existing synced directory; otherwise handoffs remain local."))
     jobs = [("Git", "git", ["--version"], False), ("Codex CLI", "codex", ["--version"], False)]
     if os.name == "nt":
         jobs.append(("PowerShell 7", "pwsh", ["--version"], False))
     if offline:
         jobs.append(("GitHub CLI", "gh", ["--version"], False))
-        checks.append(result("Online checks", "SKIP", "Authentication and MCP checks skipped (--offline)."))
+        checks.append(result("Online checks", "SKIP", "Authentication checks skipped (--offline)."))
     else:
         jobs.extend([("GitHub authentication", "gh", ["auth", "status"], False),
                      ("Codex authentication", "codex", ["login", "status"], False),
                      ("Azure authentication (optional)", "az", ["account", "show", "--output", "none"], True)])
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = [executor.submit(command_check, *job) for job in jobs]
-        server = nested(shared, "mcp_servers.knowledge")
-        if not offline and server and server == nested(local, "mcp_servers.knowledge"):
-            futures.append(executor.submit(mcp_check, server))
-        elif not offline:
-            checks.append(result("Knowledge MCP", "SKIP", "Fix configuration drift before sending credentials."))
         checks.extend(future.result() for future in futures)
     return checks
 

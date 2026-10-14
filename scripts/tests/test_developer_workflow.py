@@ -1,7 +1,5 @@
 import importlib.util
-import io
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -22,7 +20,6 @@ def load(name, path):
 
 
 doctor = load("doctor", ROOT / "scripts/test-developer-machine.py")
-pr = load("create_pr", ROOT / "skills/create-pr/scripts/create-pr-helper.py")
 
 
 class MachineChecks(unittest.TestCase):
@@ -68,52 +65,13 @@ class MachineChecks(unittest.TestCase):
             with patch.object(doctor.subprocess, "run", return_value=completed):
                 self.assertNotIn("secret-value", json.dumps(doctor.command_check("auth", "tool", ["status"])))
 
-    def test_mcp_authenticates_without_exposing_token(self):
-        response = io.BytesIO(b'{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"test"}}}')
-        response.headers = {"Content-Type": "application/json"}
-        with patch.dict(os.environ, {"TEST_MCP_TOKEN": "private-value"}):
-            with patch.object(doctor.urllib.request, "build_opener") as opener:
-                opener.return_value.open.return_value = response
-                actual = doctor.mcp_check({"url": "https://example.invalid/mcp", "bearer_token_env_var": "TEST_MCP_TOKEN"})
-                request = opener.return_value.open.call_args.args[0]
-                self.assertEqual(request.get_header("Authorization"), "Bearer private-value")
-                self.assertEqual(actual["status"], "PASS")
-                self.assertNotIn("private-value", json.dumps(actual))
-
-    def test_offline_does_not_attempt_authentication_or_network(self):
+    def test_offline_does_not_attempt_authentication(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             with patch.object(doctor, "command_check", side_effect=lambda *args: doctor.result(args[0], "PASS", "fixture")) as commands:
-                with patch.object(doctor, "mcp_check") as mcp:
-                    checks = doctor.inspect(root, root, root, offline=True)
-                    self.assertFalse(mcp.called)
-                    self.assertTrue(all(call.args[2] == ["--version"] for call in commands.call_args_list))
-                    self.assertTrue(any(item["status"] == "FAIL" for item in checks))
-
-
-class PullRequests(unittest.TestCase):
-    def test_only_supported_branch_prefixes(self):
-        for prefix in ("patch", "minor", "major"):
-            self.assertEqual(pr.branch_kind(prefix + "/example")["title_prefix"], f"[{prefix.upper()}]")
-        for branch in ("main", "feature/example", "fix/example", "chore/example", "docs/example", "breaking/example"):
-            self.assertIsNone(pr.branch_kind(branch))
-
-    def test_authorization_flag_is_still_required(self):
-        for plan in ({}, {"approved": False}, {"approved": "true"}):
-            with self.assertRaises(pr.SkillError):
-                pr.require_approved(plan)
-        pr.require_approved({"approved": True})
-
-    def test_apply_rejects_unsupported_branch_before_remote_call(self):
-        with tempfile.TemporaryDirectory() as directory:
-            plan = Path(directory) / "plan.json"
-            plan.write_text('{"approved":true}')
-            with patch.object(pr, "pull_request_template", return_value={"body": "template"}):
-                with patch.object(pr, "current_branch", return_value="feature/example"):
-                    with patch.object(pr, "resolve_vcs") as resolve:
-                        with self.assertRaises(pr.SkillError):
-                            pr.apply(directory, str(plan), False)
-                        resolve.assert_not_called()
+                checks = doctor.inspect(root, root, root, offline=True)
+                self.assertTrue(all(call.args[2] == ["--version"] for call in commands.call_args_list))
+                self.assertTrue(any(item["status"] == "FAIL" for item in checks))
 
 
 @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is required for installer tests")
@@ -133,8 +91,6 @@ $local = Join-Path $Fixture "local.toml"
 model = "shared-model"
 model_reasoning_effort = "medium"
 approval_policy = "never"
-[mcp_servers.knowledge]
-url = "https://example.invalid/mcp"
 '@ | Set-Content $source
 @'
 model = "local-model"

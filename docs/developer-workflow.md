@@ -11,7 +11,7 @@ Run the read-only check from this repository:
 
 Python 3.11 or newer is required. The Python helper also runs directly on Linux/macOS with `python3 scripts/test-developer-machine.py`; the installer and machine-sync scripts target Windows. `--home` and `--codex-home` let the helper inspect another installation. Authentication checks use the current process environment and account.
 
-The check reports CLI availability, GitHub/Codex authentication, optional Azure authentication, shared Codex configuration drift, instruction and skill links/copies for both agents, stale managed skills, the handoff directory, and an authenticated Knowledge MCP initialization. It does not run a model, change configuration or reveal credentials. Offline mode skips authentication and network checks. Independent CLI/network checks run concurrently; each CLI check has a 15-second timeout and MCP requests have a 10-second socket timeout.
+The check reports CLI availability, GitHub/Codex authentication, optional Azure authentication, shared Codex configuration drift, instruction and skill links/copies for both agents, and stale managed skills. It does not run a model, change configuration or reveal credentials. Offline mode skips authentication checks. Independent CLI checks run concurrently; each has a 15-second timeout.
 
 Exit code 0 means no failures; warnings may still need attention. Exit code 1 means at least one required check failed. JSON output contains `ok` and a `checks` array. Link/copy failures usually need `Install-DeveloperConfig.ps1`; inspect links to another checkout before replacing them.
 
@@ -21,23 +21,7 @@ To check immediately after a machine sync:
 .\scripts\Sync-DeveloperMachine.ps1 -CheckHealth
 ```
 
-`-CheckHealth` applies to that invocation; the logon task remains a sync-only task. The installer seeds missing model/reasoning defaults but preserves existing local choices. Permissions, sandbox settings and Knowledge MCP configuration remain managed. Project-level settings, selected profiles and command-line overrides can further change a Codex session; this check compares the user config, not every session's effective configuration. `CODEX_HOME` is respected. Unchanged merged Codex files are not rewritten, and scheduled syncs prefer PowerShell 7 so Claude MCP registration is supported.
-
-## Commit, push and create a PR
-
-An explicit request such as “commit, push and create a PR” authorizes all three named operations through their existing skills. The agent drafts the messages without asking for approval again. Requests to review a draft first remain conditional; secret/risk checks and material scope or target ambiguity still require resolution. Creating a PR does not authorize merging it. Branches use `patch/`, `minor/` or `major/` in both the instructions and PR helper.
-
-## Portable handoffs
-
-Choose an existing directory that your sync software already makes available on your machines. Configure its machine-specific path once:
-
-```powershell
-.\scripts\Install-DeveloperConfig.ps1 -HandoffDirectory "D:\Synced\Agent Handoffs"
-```
-
-This runs the normal installer and persists `AGENT_HANDOFF_DIR`. Restart existing agent apps to pick up the environment change. To configure only the variable on Windows, use `[Environment]::SetEnvironmentVariable("AGENT_HANDOFF_DIR", "D:\Synced\Agent Handoffs", "User")`. On Linux/macOS, set `AGENT_HANDOFF_DIR` in your shell environment. The directory is not created or synchronized by the installer.
-
-Invoke `$handoff` in Codex or `/handoff` in Claude. An explicit destination overrides the environment setting. Without an available destination the skill uses the OS temporary directory and labels the result local-only. Each handoff records the repository, branch/commit, push state, uncommitted work, verification and next action. It uses relative paths and references existing artifacts. Handoffs transfer context, not unpushed code or authorization, and are not stored as durable knowledge MCP memories.
+`-CheckHealth` applies to that invocation; the logon task remains a sync-only task. The installer seeds missing model/reasoning defaults but preserves existing local choices. Permissions and sandbox settings remain managed. Project-level settings, selected profiles and command-line overrides can further change a Codex session; this check compares the user config, not every session's effective configuration. `CODEX_HOME` is respected. Unchanged merged Codex files are not rewritten, and scheduled syncs prefer PowerShell 7.
 
 ## Scheduled Codex work
 
@@ -51,6 +35,8 @@ For a private server using your subscription, sign in there with `codex login --
 
 For this setup, use one personal server for reliable unattended CLI tasks, or one awake desktop for app-managed tasks. Avoid scheduling the same maintenance task on every synced machine. No scheduled Codex task is installed by these changes.
 
-## Orca task phases
+## Agent workflow
 
-Use the shared global instructions for supervised planning, implementation, and fresh review with private numbered `.claude` task folders. See [Orca task workflow](orca-task-workflow.md) for machine/project setup, authorized worker models, and the three session prompts. Project instruction files are not required; the existing global instruction links remain the source of policy.
+Global instructions for Claude Code and Codex live in `system/SYSTEM.md`. Both agents use the agent-skills plugin: the installer enables `agent-skills@addy-agent-skills` through `claude/settings.json` and, when the `codex` CLI is available, registers the `addyosmani/agent-skills` marketplace and adds `agent-skills@agent-skills`.
+
+Work moves through the agent-skills phases `/spec`, `/plan`, `/build`, `/review` and `/ship`. Task artefacts live under `.agents/NNN - Name/` (`SPEC.md`, `PLAN.md`, `TODO.md`, `REVIEW.md`, `SHIP.md` and `supporting/`). Architecture decision records live in `.agents/ADR/` and the project quality bar in `.agents/CONSTRAINTS.md`. `.agents/` is listed in the machine's global gitignore, so these files stay out of repositories.

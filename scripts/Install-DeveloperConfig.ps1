@@ -38,17 +38,6 @@
     per-session setup. Only needs to be passed once per machine; subsequent
     runs keep the stored value.
 
-.PARAMETER KnowledgeMcpToken
-    Bearer token for the knowledge MCP server. Persisted as the
-    KNOWLEDGE_MCP_TOKEN user environment variable; never written to any
-    configuration file. Only needs to be passed once per machine; subsequent
-    runs keep the stored value.
-
-.PARAMETER KnowledgeMcpUrl
-    MCP endpoint of the knowledge server. Registered for Claude Code in
-    ~/.claude.json (user scope, with an environment-expanded authorization
-    header) and for Codex in ~/.codex/config.toml.
-
 .EXAMPLE
     .\Install-DeveloperConfig.ps1
     .\Install-DeveloperConfig.ps1 -Repo "C:\Local Files\Repositories\ops-developer-config"
@@ -61,10 +50,7 @@ param (
     [string]$Repo = (Resolve-Path "$PSScriptRoot\..").Path,
     [switch]$InstallScheduledTask,
     [string]$TaskName = "Install Developer Config",
-    [string]$ObsidianVaultPath,
-    [string]$HandoffDirectory,
-    [string]$KnowledgeMcpToken,
-    [string]$KnowledgeMcpUrl = "https://knowledge.lab.skyhaven.ltd/mcp"
+    [string]$ObsidianVaultPath
 )
 
 Set-StrictMode -Version Latest
@@ -643,63 +629,11 @@ function Remove-TomlScalarLine {
     return $output.ToArray()
 }
 
-function Get-TomlSectionLines {
-    param([string[]]$Lines, [string]$SectionName)
-
-    $output = [System.Collections.Generic.List[string]]::new()
-    $inSection = $false
-    foreach ($line in $Lines) {
-        $name = Get-TomlSectionName $line
-        if ($null -ne $name) {
-            $inSection = ($name -eq $SectionName)
-            if ($inSection) { $output.Add($line) }
-            continue
-        }
-        if ($inSection) { $output.Add($line) }
-    }
-
-    while (($output.Count -gt 0) -and ($output[$output.Count - 1] -match '^\s*$')) {
-        $output.RemoveAt($output.Count - 1)
-    }
-    return $output.ToArray()
-}
-
-function Remove-TomlSection {
-    param([string[]]$Lines, [string]$SectionName)
-
-    $output = [System.Collections.Generic.List[string]]::new()
-    $inSection = $false
-    foreach ($line in $Lines) {
-        $name = Get-TomlSectionName $line
-        if ($null -ne $name) {
-            $inSection = ($name -eq $SectionName)
-        }
-        if (-not $inSection) { $output.Add($line) }
-    }
-
-    while (($output.Count -gt 0) -and ($output[$output.Count - 1] -match '^\s*$')) {
-        $output.RemoveAt($output.Count - 1)
-    }
-    return $output.ToArray()
-}
-
 function Merge-CodexConfig {
     param([string]$Source, [string]$Destination)
 
     $shared = Read-SharedCodexConfig $Source
-    if (Test-Path -LiteralPath $Source -PathType Leaf) {
-        $sourceLines = @(Get-Content -LiteralPath $Source -Encoding UTF8)
-    } else {
-        $sourceLines = @()
-    }
-    $managedSections = @{}
-    foreach ($sectionName in @("mcp_servers.knowledge")) {
-        $sectionLines = @(Get-TomlSectionLines -Lines $sourceLines -SectionName $sectionName)
-        if ($sectionLines.Count -gt 0) {
-            $managedSections[$sectionName] = $sectionLines
-        }
-    }
-    if (($shared.Count -eq 0) -and ($managedSections.Count -eq 0)) {
+    if ($shared.Count -eq 0) {
         Write-Host "  [skip] shared Codex config values not found: $Source" -ForegroundColor Yellow
         return
     }
@@ -733,11 +667,6 @@ function Merge-CodexConfig {
             # notifier command when it is no longer present in shared config.
             $lines = @(Remove-TomlScalarLine -Lines $lines -QualifiedKey $qualifiedKey)
         }
-    }
-
-    foreach ($sectionName in $managedSections.Keys) {
-        $lines = @(Remove-TomlSection -Lines $lines -SectionName $sectionName)
-        $lines = @($lines) + @("") + @($managedSections[$sectionName])
     }
 
     $existingLines = if (Test-Path -LiteralPath $Destination) { @(Get-Content -LiteralPath $Destination -Encoding UTF8) } else { @() }
@@ -787,67 +716,44 @@ function Set-ObsidianVaultPath {
     }
 }
 
-function Register-KnowledgeMcpServer {
-    param([string]$ClaudeConfigPath, [string]$Url)
-
-    # Register the server at user scope in the given .claude.json while
-    # preserving all other configuration in that file. The file can contain
-    # keys that differ only by casing, so it must be parsed with
-    # -AsHashtable (PowerShell 7+).
-    if (Test-Path -LiteralPath $ClaudeConfigPath -PathType Leaf) {
-        $claudeConfig = Get-Content -LiteralPath $ClaudeConfigPath -Raw | ConvertFrom-Json -AsHashtable
-    } else {
-        $claudeConfig = @{}
-    }
-    if (-not $claudeConfig.ContainsKey("mcpServers")) {
-        $claudeConfig["mcpServers"] = @{}
-    }
-
-    $server = [ordered]@{
-        type    = "http"
-        url     = $Url
-        headers = [ordered]@{
-            Authorization = 'Bearer ${KNOWLEDGE_MCP_TOKEN}'
-        }
-    }
-    $desiredJson = $server | ConvertTo-Json -Compress
-    if ($claudeConfig["mcpServers"].ContainsKey("knowledge")) {
-        $existingJson = $claudeConfig["mcpServers"]["knowledge"] | ConvertTo-Json -Compress
-        if ($existingJson -eq $desiredJson) {
-            Write-Host "  [skip] knowledge MCP already registered in $ClaudeConfigPath" -ForegroundColor DarkGray
-            return
-        }
-    }
-    $claudeConfig["mcpServers"]["knowledge"] = $server
-    if (Test-Path -LiteralPath $ClaudeConfigPath -PathType Leaf) {
-        Copy-Item -LiteralPath $ClaudeConfigPath -Destination "$ClaudeConfigPath.backup" -Force
-    } else {
-        New-Item -ItemType Directory -Path (Split-Path $ClaudeConfigPath) -Force | Out-Null
-    }
-    $claudeConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $ClaudeConfigPath -Encoding UTF8
-    Write-Host "  [merge]  $ClaudeConfigPath <= knowledge MCP server (user scope)" -ForegroundColor Green
-}
-
-function Install-KnowledgeMcp {
-    param([string]$Url, [string]$Token, [string[]]$ClaudeConfigPaths)
-
-    $variableName = "KNOWLEDGE_MCP_TOKEN"
-    if ($Token) {
-        [Environment]::SetEnvironmentVariable($variableName, $Token, "User")
-        Set-Item -Path "Env:$variableName" -Value $Token
-        Write-Host "  [env]  $variableName set for this user" -ForegroundColor Green
-    } elseif (-not [Environment]::GetEnvironmentVariable($variableName, "User")) {
-        Write-Host "  [warn] $variableName is not set. Agents cannot authenticate to the knowledge MCP." -ForegroundColor Yellow
-        Write-Host "         Set it once with: .\Install-DeveloperConfig.ps1 -KnowledgeMcpToken `"<token>`"" -ForegroundColor Yellow
-    }
-
-    if ($PSVersionTable.PSVersion.Major -lt 6) {
-        Write-Host "  [warn] Claude MCP registration requires PowerShell 7; run this script once in pwsh." -ForegroundColor Yellow
+function Install-CodexAgentSkills {
+    $codexCli = Get-Command codex -ErrorAction SilentlyContinue
+    if (-not $codexCli) {
+        Write-Host "  [warn] codex CLI not found; agent-skills plugin not installed for Codex" -ForegroundColor Yellow
         return
     }
-    foreach ($claudeConfigPath in $ClaudeConfigPaths) {
-        Register-KnowledgeMcpServer -ClaudeConfigPath $claudeConfigPath -Url $Url
+
+    $marketplaceJson = & $codexCli.Source plugin marketplace list --json
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  [warn] codex plugin marketplace list failed; agent-skills plugin not installed for Codex" -ForegroundColor Yellow
+        return
     }
+    if (@(($marketplaceJson | Out-String | ConvertFrom-Json).marketplaces | Where-Object { $_.name -eq "agent-skills" }).Count -gt 0) {
+        Write-Host "  [skip] Codex marketplace agent-skills already registered" -ForegroundColor DarkGray
+    } else {
+        & $codexCli.Source plugin marketplace add addyosmani/agent-skills
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [warn] codex plugin marketplace add addyosmani/agent-skills failed" -ForegroundColor Yellow
+            return
+        }
+        Write-Host "  [plugin] Codex marketplace agent-skills <= addyosmani/agent-skills" -ForegroundColor Green
+    }
+
+    $pluginJson = & $codexCli.Source plugin list --json
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  [warn] codex plugin list failed; agent-skills plugin not installed for Codex" -ForegroundColor Yellow
+        return
+    }
+    if (@(($pluginJson | Out-String | ConvertFrom-Json).installed | Where-Object { $_.pluginId -eq "agent-skills@agent-skills" }).Count -gt 0) {
+        Write-Host "  [skip] Codex plugin agent-skills@agent-skills already installed" -ForegroundColor DarkGray
+        return
+    }
+    & $codexCli.Source plugin add agent-skills@agent-skills
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  [warn] codex plugin add agent-skills@agent-skills failed" -ForegroundColor Yellow
+        return
+    }
+    Write-Host "  [plugin] Codex plugin agent-skills@agent-skills installed" -ForegroundColor Green
 }
 
 function ConvertTo-TaskArgument {
@@ -1011,24 +917,12 @@ Remove-ManagedFileLink "$codex\instructions.md" "$Repo\codex\instructions.md" | 
 Remove-ManagedFileLink "$codex\AGENTS.md" "$Repo\codex\AGENTS.md" | Out-Null
 New-Symlink "$codex\AGENTS.md" $systemInstructions
 Merge-CodexConfig "$Repo\codex\config.toml" "$codex\config.toml"
-
-# -- Knowledge MCP -----------------------------------------------------------
-
-Write-Host "`nKnowledge MCP" -ForegroundColor Cyan
-$claudeConfigPaths = @("$env:USERPROFILE\.claude.json") + ($extraClaudeProfileDirectories | ForEach-Object { "$_\.claude.json" })
-Install-KnowledgeMcp $KnowledgeMcpUrl $KnowledgeMcpToken $claudeConfigPaths
+Install-CodexAgentSkills
 
 # -- Obsidian ----------------------------------------------------------------
 
 Write-Host "`nObsidian" -ForegroundColor Cyan
 Set-ObsidianVaultPath $ObsidianVaultPath
-if ($HandoffDirectory) {
-    $resolvedHandoffDirectory = (Resolve-Path -LiteralPath $HandoffDirectory -ErrorAction Stop).Path
-    if (-not (Test-Path -LiteralPath $resolvedHandoffDirectory -PathType Container)) { throw "HandoffDirectory must be an existing synced directory." }
-    [Environment]::SetEnvironmentVariable("AGENT_HANDOFF_DIR", $resolvedHandoffDirectory, "User")
-    $env:AGENT_HANDOFF_DIR = $resolvedHandoffDirectory
-    Write-Host "  [env]  AGENT_HANDOFF_DIR = $resolvedHandoffDirectory" -ForegroundColor Green
-}
 
 # -- Cloud contexts -----------------------------------------------------------
 
