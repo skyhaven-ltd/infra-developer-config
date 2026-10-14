@@ -40,3 +40,5 @@ For this setup, use one personal server for reliable unattended CLI tasks, or on
 Global instructions for Claude Code and Codex live in `system/SYSTEM.md`. Both agents use the agent-skills plugin: the installer enables `agent-skills@addy-agent-skills` through `claude/settings.json` and, when the `codex` CLI is available, registers the `addyosmani/agent-skills` marketplace and adds `agent-skills@agent-skills`.
 
 Work moves through the agent-skills phases `/spec`, `/plan`, `/build`, `/review` and `/ship`. Task artefacts live under `.agents/NNN - Name/` (`SPEC.md`, `PLAN.md`, `TODO.md`, `REVIEW.md`, `SHIP.md` and `supporting/`). Architecture decision records live in `.agents/ADR/` and the project quality bar in `.agents/CONSTRAINTS.md`. `.agents/` is listed in the machine's global gitignore, so these files stay out of repositories.
+
+See [agent-workflow.md](agent-workflow.md) for the step-by-step workflow to follow.
