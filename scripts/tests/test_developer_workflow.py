@@ -119,6 +119,59 @@ if (-not (Get-Content $fresh -Raw).Contains('model = "shared-model"')) { throw "
             completed = subprocess.run([shutil.which("pwsh"), "-NoProfile", "-File", str(harness), str(ROOT), directory], capture_output=True, text=True, timeout=30)
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
+    def run_installer_functions(self, body):
+        script = r'''
+param($Repository, $Fixture)
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $Repository "scripts/Install-DeveloperConfig.ps1"), [ref]$tokens, [ref]$errors)
+if ($errors.Count) { throw ($errors | Out-String) }
+$ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $false) | ForEach-Object { . ([scriptblock]::Create($_.Extent.Text)) }
+''' + body
+        with tempfile.TemporaryDirectory() as directory:
+            harness = Path(directory) / "check.ps1"
+            harness.write_text(script)
+            completed = subprocess.run([shutil.which("pwsh"), "-NoProfile", "-File", str(harness), str(ROOT), directory], capture_output=True, text=True, timeout=30)
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+    def test_junction_with_previous_target_is_retargeted(self):
+        self.run_installer_functions(r'''
+$old = New-Item -ItemType Directory -Path (Join-Path $Fixture "old")
+$new = New-Item -ItemType Directory -Path (Join-Path $Fixture "new")
+$link = Join-Path $Fixture "link"
+New-Junction $link $old.FullName
+New-Junction $link $new.FullName
+if (-not (Test-ReparseTarget $link $new.FullName)) { throw "Junction still points at the previous target." }
+''')
+
+    def test_claude_settings_seed_defaults_expand_profile_and_are_idempotent(self):
+        self.run_installer_functions(r'''
+$source = Join-Path $Fixture "shared.json"
+$local = Join-Path $Fixture "local.json"
+@'
+{
+  "permissions": { "allow": ["Read"] },
+  "model": "shared-model",
+  "statusLine": { "type": "command", "command": "node \"%USERPROFILE%/.claude/statusline.js\"" }
+}
+'@ | Set-Content $source
+@'
+{ "model": "local-model", "permissions": { "allow": ["Old"] } }
+'@ | Set-Content $local
+Merge-ClaudeSettings $source $local
+$merged = Get-Content $local -Raw | ConvertFrom-Json
+if ($merged.model -ne "local-model") { throw "Local model was overwritten." }
+if (@($merged.permissions.allow) -join "," -ne "Read") { throw "Shared permissions were not applied." }
+if ($merged.statusLine.command -ne "node `"$env:USERPROFILE/.claude/statusline.js`"") { throw "Profile path was not expanded: $($merged.statusLine.command)" }
+$first = Get-Content $local -Raw
+Merge-ClaudeSettings $source $local
+if ((Get-Content $local -Raw) -ne $first) { throw "Second merge changed the settings." }
+$fresh = Join-Path $Fixture "fresh.json"
+Merge-ClaudeSettings $source $fresh
+if ((Get-Content $fresh -Raw | ConvertFrom-Json).model -ne "shared-model") { throw "Missing initial model default." }
+''')
+
 
 if __name__ == "__main__":
     unittest.main()

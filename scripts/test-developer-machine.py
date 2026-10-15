@@ -123,7 +123,9 @@ def inspect(repo, user_root, codex_home, offline=False):
             managed = (installed / ".managed-by-ops-developer-config").exists() or installed.resolve().is_relative_to((repo / "skills").resolve())
             if installed.name not in names and managed:
                 checks.append(result(f"{tool} stale skill {installed.name}", "WARN", "Removed from source; rerun installer to remove the managed entry."))
-    jobs = [("Git", "git", ["--version"], False), ("Codex CLI", "codex", ["--version"], False)]
+    for name in ("statusline.js", "keybindings.json"):
+        checks.append(check_copy(f"Claude {name}", repo / "claude" / name, user_root / ".claude" / name))
+    jobs = [("Git", "git", ["--version"], False), ("Codex CLI", "codex", ["--version"], False), ("Claude Code", "claude", ["--version"], False)]
     if os.name == "nt":
         jobs.append(("PowerShell 7", "pwsh", ["--version"], False))
     if offline:

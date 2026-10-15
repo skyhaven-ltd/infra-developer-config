@@ -35,7 +35,18 @@
       }
     }
   },
-  "effortLevel": "medium",
   "awaySummaryEnabled": false,
-  "model": "haiku"
+  "model": "opus",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node \"%USERPROFILE%/.claude/statusline.js\""
+  },
+  "respectGitignore": false,
+  "skipDangerousModePermissionPrompt": true,
+  "switchModelsOnFlag": false
 }

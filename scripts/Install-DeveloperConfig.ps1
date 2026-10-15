@@ -73,8 +73,12 @@ function New-Junction {
     param([string]$Link, [string]$Target)
     $item = Get-Item -LiteralPath $Link -ErrorAction SilentlyContinue
     if ($item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
-        Write-Host "  [skip] $Link already linked" -ForegroundColor DarkGray
-        return
+        if (Test-ReparseTarget $Link $Target) {
+            Write-Host "  [skip] $Link already linked" -ForegroundColor DarkGray
+            return
+        }
+        Remove-DirectoryReparsePoint $Link
+        Write-Host "  [remove] $Link linked to a previous managed target" -ForegroundColor Yellow
     }
     Remove-IfReal $Link
     New-Item -ItemType Directory -Path (Split-Path $Link) -Force | Out-Null
@@ -463,21 +467,22 @@ function Merge-ClaudeSettings {
         }
     }
 
+    foreach ($property in $sourceSettings.PSObject.Properties) {
+        if (-not $merged.Contains($property.Name)) {
+            $merged[$property.Name] = $property.Value
+        }
+    }
+
     # Shared hooks replace local hooks only when the shared settings define
     # them; otherwise local hooks, such as Orca's, are preserved.
     if ($sourceSettings.PSObject.Properties.Name -contains "hooks") {
         $merged["hooks"] = $sourceSettings.hooks
     }
 
-    # Hook commands are not run through cmd, so %USERPROFILE% is never
-    # expanded; substitute the machine's absolute profile path at merge time.
-    if ($merged.Contains("hooks")) {
-        $hooksJson = $merged["hooks"] | ConvertTo-Json -Depth 20
-        $escapedProfile = $env:USERPROFILE.Replace("\", "\\")
-        $merged["hooks"] = $hooksJson.Replace("%USERPROFILE%", $escapedProfile) | ConvertFrom-Json
-    }
-
-    $merged | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $Destination -Encoding UTF8
+    # Hook and status line commands are not run through cmd, so %USERPROFILE%
+    # is never expanded; substitute the machine's absolute profile path at merge time.
+    $escapedProfile = $env:USERPROFILE.Replace("\", "\\")
+    ($merged | ConvertTo-Json -Depth 20).Replace("%USERPROFILE%", $escapedProfile) | Set-Content -LiteralPath $Destination -Encoding UTF8
     Write-Host "  [merge]  $Destination <= shared permissions/plugins" -ForegroundColor Green
 }
 
@@ -900,6 +905,8 @@ New-Junction "$claude\docs" "$Repo\docs"
 $systemInstructions = "$Repo\system\SYSTEM.md"
 Remove-ManagedFileLink "$claude\CLAUDE.md" "$Repo\claude\CLAUDE.md" | Out-Null
 New-Symlink "$claude\CLAUDE.md" $systemInstructions
+New-Symlink "$claude\statusline.js" "$Repo\claude\statusline.js"
+New-Symlink "$claude\keybindings.json" "$Repo\claude\keybindings.json"
 $extraClaudeProfileDirectories = @(
     "$env:USERPROFILE\.claude-work"
     "$env:USERPROFILE\.claude-personal"
