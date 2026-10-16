@@ -27,10 +27,10 @@ test('usage sits on its own row under the task', async $ => {
   await ui.unmount()
 })
 
-test('band draws no border rows', async $ => {
+test('band sits in one rounded bubble', async $ => {
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   const boxes = await ui.findAll({ type: 'Box' })
-  expect(boxes.filter(box => box.props.borderStyle !== undefined)).toHaveLength(0)
+  expect(boxes.filter(box => box.props.borderStyle !== undefined).map(box => box.props.borderStyle)).toEqual(['round'])
   await ui.unmount()
 })
 
@@ -59,5 +59,31 @@ test('band yields to a survey', async ($, on) => {
   })
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, hasSurvey: true } })
   expect(await ui.find({ type: 'Text', text: /No active task/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('band stacks labelled rows', async $ => {
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^Task: +No active task/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Context: +– \| Cost: –/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Agents:/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a subagent spins in the band while it runs, then ticks and leaves', async ($, on) => {
+  const clock = mock.clock(on)
+  let status = 'running'
+  on('agent.spawn', () => ({ model: 'm', agentId: 'a1' }) as never)
+  on('agent.list', () => ({ value: [{ id: 'a1', type: 'Explore', description: 'Find upload handlers', status }] }) as never)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await $.agent.spawn({ prompt: 'look', description: 'Find upload handlers', subagentType: 'Explore' } as never)
+  await clock.advance(65_000)
+  expect(await ui.find({ type: 'Text', text: /Agents:/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Explore  Find upload handlers  1:0\d · 0 tools$/ })).toBeDefined()
+  status = 'completed'
+  await clock.advance(200)
+  expect(await ui.find({ type: 'Text', text: /^✓ Explore/ })).toBeDefined()
+  await clock.advance(7_000)
+  expect(await ui.find({ type: 'Text', text: /Agents:/ })).toBeUndefined()
   await ui.unmount()
 })

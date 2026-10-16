@@ -1,13 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Context, Cost, Step, Track, Where } from '../types'
-import { compact, money, parseCycle, pickTask, title, trackFromFolder, trackFromGit } from './phase'
+import type { Context, Cost, Crew, Radar, Step, Track, Where } from '../types'
+import { compact, elapsed, money, parseCycle, pickTask, title, trackFromFolder, trackFromGit } from './phase'
 import type { GitState } from './phase'
 
 const where = atom({ plugin: 'lifecycle-band', key: 'where' } as const, { track: null, branch: null } as Where)
 const context = atom({ plugin: 'lifecycle-band', key: 'context' } as const, null as Context | null)
 const cost = atom({ plugin: 'lifecycle-band', key: 'cost' } as const, null as Cost | null)
+const radar = atom({ plugin: 'lifecycle-band', key: 'radar' } as const, { frame: 0, now: 0, crew: [] } as Radar)
 
 const GH = {
   fg: '#e6edf3',
@@ -17,7 +18,16 @@ const GH = {
   success: '#3fb950',
   attention: '#d29922',
   done: '#a371f7',
+  danger: '#f85149',
 }
+
+const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+const CREW_COLORS = [GH.accent, GH.done, GH.success, GH.attention, '#f778ba', '#39c5cf']
+const SPIN_MS = 120
+const LINGER_MS = 6_000
+const ACTIVE = new Set(['pending', 'running', 'waiting'])
+const FAILED = new Set(['failed', 'killed'])
+const LABEL_WIDTH = 9
 
 const RATE_URL = 'https://api.frankfurter.dev/v1/latest?base=USD&symbols=GBP'
 const POLL_MS = 15_000
@@ -146,16 +156,87 @@ async function refresh($: EngineInterface): Promise<void> {
   }
 }
 
+const started = new Map<string, number>()
+const finished = new Map<string, { at: number; state: Crew['state'] }>()
+const toolCounts = new Map<string, number>()
+let frame = 0
+let spinner: Timer | undefined
+let isSweeping = false
+
+function hue(type: string): string {
+  let sum = 0
+  for (const char of type) sum = (sum * 31 + char.charCodeAt(0)) >>> 0
+  return CREW_COLORS[sum % CREW_COLORS.length]!
+}
+
+async function sweep($: EngineInterface): Promise<void> {
+  if (isSweeping) return
+  isSweeping = true
+  try {
+    const now = await $.clock.now()
+    const agents = await $.agent.list().catch(() => [])
+    const crew: Crew[] = []
+    for (const agent of agents) {
+      if (agent.status === 'idle') continue
+      if (ACTIVE.has(agent.status)) {
+        if (!started.has(agent.id)) started.set(agent.id, now)
+      } else if (started.has(agent.id) && !finished.has(agent.id)) {
+        const state = FAILED.has(agent.status) ? 'failed' : 'done'
+        finished.set(agent.id, { at: now, state })
+        const took = elapsed(now - started.get(agent.id)!)
+        const verdict = state === 'done' ? '✓' : '✗'
+        $.ui.toast(`${verdict} ${agent.type} ${state} in ${took} · ${toolCounts.get(agent.id) ?? 0} tools · ${agent.description}`)
+      }
+      const startedAt = started.get(agent.id)
+      if (startedAt === undefined) continue
+      const end = finished.get(agent.id)
+      if (end && now - end.at > LINGER_MS) continue
+      crew.push({
+        id: agent.id,
+        type: agent.type,
+        description: agent.description,
+        state: end?.state ?? 'running',
+        startedAt,
+        endedAt: end?.at ?? null,
+        tools: toolCounts.get(agent.id) ?? 0,
+      })
+    }
+    frame += 1
+    await update($, radar, () => ({ frame, now, crew }))
+    if (crew.length === 0) {
+      spinner?.cancel()
+      spinner = undefined
+    }
+  } catch {
+  } finally {
+    isSweeping = false
+  }
+}
+
+function watch($: EngineInterface): void {
+  spinner ??= $.clock.every(SPIN_MS, () => void sweep($))
+  void sweep($)
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     poll?.cancel()
     poll = $.clock.every(POLL_MS, () => void refresh($))
     void refresh($)
+    watch($)
+    return result
+  })
+
+  on('agent.spawn', async ($, e, next) => {
+    const result = await next(e)
+    if (result.agentId) started.set(result.agentId, await $.clock.now())
+    watch($)
     return result
   })
 
   on('tool.call', async ($, e, next) => {
+    if (e.agentId) toolCounts.set(e.agentId, (toolCounts.get(e.agentId) ?? 0) + 1)
     const result = await next(e)
     if (REFRESH_TOOLS.has(e.tool)) void refresh($)
     return result
@@ -174,6 +255,7 @@ export const register: Register = on => {
     const { track, branch } = await read($, where)
     const window = await read($, context)
     const spent = await read($, cost)
+    const crewRadar = await read($, radar)
 
     const glyph: Record<Step['state'], { mark: string; color: string }> = {
       done: { mark: '✓', color: GH.success },
@@ -194,33 +276,89 @@ export const register: Register = on => {
 
     const label = track?.task ?? (track ? 'Small change' : 'No active task')
     const kind = track?.kind ? ` (${track.kind})` : ''
+    const name = (text: string) => `${text}:`.padEnd(LABEL_WIDTH)
+
+    const fixed = 6 + (branch ? 1 : 0) + (track ? 1 : 0)
+    const room = Math.max(1, e.props.maxRows - fixed)
+    const crew = crewRadar.crew
+    const shown = crew.length <= room ? crew : crew.slice(0, room - 1)
+    const hidden = crew.length - shown.length
+
+    const member = (c: Crew, index: number) => {
+      const color = hue(c.type)
+      const spin = SPIN[(crewRadar.frame + index * 3) % SPIN.length]!
+      const mark = c.state === 'running' ? spin : c.state === 'done' ? '✓' : '✗'
+      const markColor = c.state === 'running' ? color : c.state === 'done' ? GH.success : GH.danger
+      const took = elapsed((c.endedAt ?? crewRadar.now) - c.startedAt)
+      return (
+        <Text key={`agent-${c.id}`} wrap="truncate-end">
+          <Text color={markColor}>{`${mark} `}</Text>
+          <Text color={color} bold>
+            {c.type}
+          </Text>
+          <Text color={GH.fg}>{`  ${c.description}`}</Text>
+          <Text color={GH.muted}>{`  ${took} · ${c.tools} tools`}</Text>
+        </Text>
+      )
+    }
 
     return (
-      <Box key="band" paddingX={1} marginTop={1} flexDirection="column">
-        <Box flexDirection="row" flexWrap="wrap" columnGap={2} alignItems="center">
+      <Box
+        key="band"
+        paddingX={1}
+        marginTop={1}
+        borderStyle="round"
+        borderColor={GH.muted}
+        alignSelf="flex-start"
+        flexDirection="column"
+      >
+        <Text color={GH.muted}>
+          {name('Task')}
           <Text color={GH.fg} bold>
             {label}
-            <Text color={GH.muted}>{kind}</Text>
-            {branch ? <Text color={GH.done}>{`  ${branch}`}</Text> : null}
           </Text>
-          {(track?.steps ?? []).map(step)}
-          {track && !track.next ? (
-            <Text key="shipped" color={GH.success} bold>
-              Shipped
-            </Text>
-          ) : null}
-        </Box>
-        <Box flexDirection="row" columnGap={2}>
+          {kind}
+        </Text>
+        {branch ? (
           <Text color={GH.muted}>
-            Context:{' '}
-            <Text color={GH.fg}>
-              {window ? `${compact(window.tokens)}${window.percent === null ? '' : ` (${window.percent}%)`}` : '–'}
-            </Text>
+            {name('Branch')}
+            <Text color={GH.done}>{branch}</Text>
           </Text>
-          <Text color={GH.muted}>
-            Cost: <Text color={GH.attention}>{spent ? money(spent.usd, spent.gbpPerUsd) : '–'}</Text>
+        ) : null}
+        {track ? (
+          <Box flexDirection="row">
+            <Text color={GH.muted}>{name('Stage')}</Text>
+            <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+              {track.steps.map(step)}
+              {!track.next ? (
+                <Text key="shipped" color={GH.success} bold>
+                  Shipped
+                </Text>
+              ) : null}
+            </Box>
+          </Box>
+        ) : null}
+        <Text color={GH.muted}>
+          {name('Context')}
+          <Text color={GH.fg}>
+            {window ? `${compact(window.tokens)}${window.percent === null ? '' : ` (${window.percent}%)`}` : '–'}
           </Text>
-        </Box>
+          {' | Cost: '}
+          <Text color={GH.attention}>{spent ? money(spent.usd, spent.gbpPerUsd) : '–'}</Text>
+        </Text>
+        {crew.length > 0 ? (
+          <Box flexDirection="row">
+            <Text color={GH.muted}>{name('Agents')}</Text>
+            <Box flexDirection="column">
+              {shown.map(member)}
+              {hidden > 0 ? (
+                <Text key="agents-more" color={GH.muted}>
+                  {`+${hidden} more`}
+                </Text>
+              ) : null}
+            </Box>
+          </Box>
+        ) : null}
       </Box>
     )
   })

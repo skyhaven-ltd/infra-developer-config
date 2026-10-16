@@ -22,8 +22,20 @@ export type Context = { tokens: number; percent: number | null }
 
 export type Cost = { usd: number; gbpPerUsd: number | null }
 
+export type Crew = {
+  id: string
+  type: string
+  description: string
+  state: 'running' | 'done' | 'failed'
+  startedAt: number
+  endedAt: number | null
+  tools: number
+}
+
+export type Radar = { frame: number; now: number; crew: Crew[] }
+
 declare module 'claude-code' {
   interface PluginState {
-    'lifecycle-band': { where: Where; context: Context | null; cost: Cost | null }
+    'lifecycle-band': { where: Where; context: Context | null; cost: Cost | null; radar: Radar }
   }
 }

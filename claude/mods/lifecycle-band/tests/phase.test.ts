@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { compact, money, parseCycle, parseTodo, pickTask, trackFromFolder, trackFromGit } from '../hooks/phase'
+import { compact, elapsed, money, parseCycle, parseTodo, pickTask, trackFromFolder, trackFromGit } from '../hooks/phase'
 
 const states = (track: ReturnType<typeof trackFromFolder>) => track.steps.map(s => `${s.phase}:${s.state}`)
 
@@ -140,4 +140,9 @@ describe('helpers', () => {
     expect(money(0.29, 0.75491)).toBe('£0.22')
     expect(money(0.29, null)).toBe('$0.29')
   })
+})
+
+test('elapsed reads as minutes and seconds', () => {
+  expect(elapsed(0)).toBe('0:00')
+  expect(elapsed(65_400)).toBe('1:05')
 })
