@@ -196,7 +196,7 @@ export const register: Register = on => {
     const kind = track?.kind ? ` (${track.kind})` : ''
 
     return (
-      <Box key="band" paddingX={1} flexDirection="column">
+      <Box key="band" paddingX={1} marginTop={1} flexDirection="column">
         <Box flexDirection="row" flexWrap="wrap" columnGap={2} alignItems="center">
           <Text color={GH.fg} bold>
             {label}
