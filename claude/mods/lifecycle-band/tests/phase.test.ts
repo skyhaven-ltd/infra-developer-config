@@ -50,7 +50,13 @@ describe('full cycle from marker files', () => {
 describe('CYCLE.md picks the phases', () => {
   test('checklist form sets kind, phases and ticks', async () => {
     const cycle = parseCycle('type: Bug\n- [x] test\n- [ ] build\n- [ ] review\n- [ ] ship\n')
-    expect(cycle).toEqual({ kind: 'bug', phases: ['test', 'build', 'review', 'ship'], ticked: ['test'] })
+    expect(cycle).toEqual({ kind: 'bug', branches: [], phases: ['test', 'build', 'review', 'ship'], ticked: ['test'] })
+  })
+
+  test('branch lines bind the task to its branches', async () => {
+    const cycle = parseCycle('type: small\nbranch: `patch/a-b`\r\nbranch: Minor/C\n- [ ] build\n')
+    expect(cycle.branches).toEqual(['patch/a-b', 'Minor/C'])
+    expect(cycle.phases).toEqual(['build'])
   })
 
   test('phases line form', async () => {
@@ -95,21 +101,32 @@ describe('git fallback with no task folder', () => {
 })
 
 describe('helpers', () => {
-  test('newest folder wins, ignoring non-task names', async () => {
-    const picked = pickTask([
-      { name: '001 - Old', newest: 10 },
-      { name: '002 - New', newest: 30 },
-      { name: 'ADR', newest: 99 },
-    ])
-    expect(picked).toBe('002 - New')
+  test('the task bound to the current branch wins over a newer one', async () => {
+    const tasks = [
+      { name: '001 - Mine', branches: ['patch/mine'] },
+      { name: '002 - Other', branches: ['patch/other'] },
+    ]
+    expect(pickTask(tasks, 'patch/mine')).toBe('001 - Mine')
   })
 
-  test('tie goes to the higher number', async () => {
-    expect(pickTask([{ name: '001 - A', newest: 5 }, { name: '002 - B', newest: 5 }])).toBe('002 - B')
+  test('no task bound to the branch shows none', async () => {
+    const tasks = [{ name: '001 - A', branches: ['patch/a'] }, { name: '002 - B', branches: [] }]
+    expect(pickTask(tasks, 'minor/new-work')).toBeNull()
+    expect(pickTask(tasks, null)).toBeNull()
   })
 
-  test('no task folders', async () => {
-    expect(pickTask([{ name: 'CONSTRAINTS.md', newest: 1 }])).toBeNull()
+  test('branch matches case-insensitively and ignores non-task names', async () => {
+    expect(pickTask([{ name: 'ADR', branches: ['patch/a'] }, { name: '003 - C', branches: ['Patch/A'] }], 'patch/a')).toBe(
+      '003 - C',
+    )
+  })
+
+  test('two tasks on one branch go to the higher number', async () => {
+    const tasks = [
+      { name: '007 - A', branches: ['patch/shared'] },
+      { name: '008 - B', branches: ['patch/other', 'patch/shared'] },
+    ]
+    expect(pickTask(tasks, 'patch/shared')).toBe('008 - B')
   })
 
   test('todo counts', async () => {

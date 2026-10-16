@@ -54,7 +54,7 @@ Everything the agent creates sits under `.agents/` at the repository root. The g
 
 - Task numbers are three digits and increase by one per repository.
 - `TODO.md` is the progress record. Unticked items mean the task is still open.
-- The lifecycle band above the Claude Code prompt shows the newest task's phases, its next phase and the session's tokens and cost. Its Next button puts that phase's command in the prompt. Without `CYCLE.md` it assumes all five phases; with no task folder it reads git state.
+- The lifecycle band above the Claude Code prompt shows the phases of the task whose `CYCLE.md` `branch:` line matches the current branch, with the session's context window and cost. A task without `branch:` never shows. Without phases in `CYCLE.md` it assumes all five; with no matching task it reads git state.
 - If two tasks are open, the agent asks which one to work on.
 
 ## 5. Move between sessions

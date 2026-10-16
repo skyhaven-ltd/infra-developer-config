@@ -15,10 +15,11 @@ const TASK_NAME = /^\d{3} - .+/
 
 const isPhase = (word: string): word is Phase => (ALL_PHASES as string[]).includes(word)
 
-export type Cycle = { kind: string | null; phases: Phase[]; ticked: Phase[] }
+export type Cycle = { kind: string | null; branches: string[]; phases: Phase[]; ticked: Phase[] }
 
 export function parseCycle(text: string): Cycle {
   let kind: string | null = null
+  const branches: string[] = []
   const phases: Phase[] = []
   const ticked: Phase[] = []
 
@@ -26,6 +27,12 @@ export function parseCycle(text: string): Cycle {
     const type = /^\s*type\s*:\s*(.+?)\s*$/i.exec(line)
     if (type?.[1]) {
       kind = type[1].toLowerCase()
+      continue
+    }
+
+    const branch = /^\s*branch\s*:\s*`?([^`\s]+)`?\s*$/i.exec(line)
+    if (branch?.[1]) {
+      branches.push(branch[1])
       continue
     }
 
@@ -46,7 +53,7 @@ export function parseCycle(text: string): Cycle {
     }
   }
 
-  return { kind, phases, ticked }
+  return { kind, branches, phases, ticked }
 }
 
 export function parseTodo(text: string): { done: number; total: number } {
@@ -117,11 +124,15 @@ export function trackFromGit(git: GitState): Track | null {
   }
 }
 
-export type TaskEntry = { name: string; newest: number }
+export type TaskEntry = { name: string; branches: string[] }
 
-export function pickTask(entries: TaskEntry[]): string | null {
-  const tasks = entries.filter(entry => TASK_NAME.test(entry.name))
-  tasks.sort((a, b) => b.newest - a.newest || b.name.localeCompare(a.name))
+export function pickTask(entries: TaskEntry[], branch: string | null): string | null {
+  if (branch === null) return null
+  const wanted = branch.toLowerCase()
+  const tasks = entries.filter(
+    entry => TASK_NAME.test(entry.name) && entry.branches.some(bound => bound.toLowerCase() === wanted),
+  )
+  tasks.sort((a, b) => b.name.localeCompare(a.name))
   return tasks[0]?.name ?? null
 }
 

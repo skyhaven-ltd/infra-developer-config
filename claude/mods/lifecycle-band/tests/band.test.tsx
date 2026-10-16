@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 const BAND = {
   plugin: 'lifecycle-band',
@@ -13,24 +13,42 @@ const BAND = {
   },
 } as const
 
-test('band draws on the terminal with no task and a Start button', async $ => {
+test('band draws on the terminal with no task and no button', async $ => {
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /No active task/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Tokens In/ })).toBeDefined()
-  expect(await ui.find({ key: 'next' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Context/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button' })).toBeUndefined()
   await ui.unmount()
 })
 
-test('Start button fills the prompt with the spec skill, keeping the draft', async ($, on) => {
-  let filled = ''
-  on('prompt.read', () => ({ value: { text: 'fix login ', cursor: 10 } }) as never)
-  on('prompt.fill', ($, e) => {
-    filled = e.text
-    return { isFilled: true, box: { text: e.text, cursor: e.text.length } } as never
+test('usage sits on its own row under the task', async $ => {
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find({ key: 'band' }))?.props.flexDirection).toBe('column')
+  await ui.unmount()
+})
+
+test('band draws no border rows', async $ => {
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const boxes = await ui.findAll({ type: 'Box' })
+  expect(boxes.filter(box => box.props.borderStyle !== undefined)).toHaveLength(0)
+  await ui.unmount()
+})
+
+test('a model request refreshes the live context window and drops token totals', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  on('session.usage', () => ({
+    value: { startedAt: 0, context: { tokens: 45_000, window: 200_000, percent: 23 }, rateLimits: [], cost: { usd: 0.5 } },
+  }) as never)
+  on('turn.step', async function* () {
+    return { turnId: 't', index: 0, answer: '', toolUses: [], stopReason: 'end_turn' } as never
   })
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  await ui.press({ key: 'next' })
-  expect(filled).toBe('/agent-skills:spec fix login ')
+  for await (const _ of $.turn.step({ turnId: 't', index: 0, model: 'm', messageCount: 1 })) {
+  }
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /Context: 45k \(23%\)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Tokens/ })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -40,6 +58,6 @@ test('band yields to a survey', async ($, on) => {
     return <Text key="engine">engine</Text>
   })
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, hasSurvey: true } })
-  expect(await ui.find({ key: 'next' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /No active task/ })).toBeUndefined()
   await ui.unmount()
 })

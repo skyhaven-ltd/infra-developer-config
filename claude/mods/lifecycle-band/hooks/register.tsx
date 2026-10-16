@@ -1,16 +1,15 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Cost, Phase, Step, Tokens, Track, Where } from '../types'
-import { compact, money, pickTask, title, trackFromFolder, trackFromGit } from './phase'
+import type { Context, Cost, Step, Track, Where } from '../types'
+import { compact, money, parseCycle, pickTask, title, trackFromFolder, trackFromGit } from './phase'
 import type { GitState } from './phase'
 
 const where = atom({ plugin: 'lifecycle-band', key: 'where' } as const, { track: null, branch: null } as Where)
-const tokens = atom({ plugin: 'lifecycle-band', key: 'tokens' } as const, { input: 0, output: 0 } as Tokens)
+const context = atom({ plugin: 'lifecycle-band', key: 'context' } as const, null as Context | null)
 const cost = atom({ plugin: 'lifecycle-band', key: 'cost' } as const, null as Cost | null)
 
 const GH = {
-  border: '#30363d',
   fg: '#e6edf3',
   muted: '#8b949e',
   subtle: '#6e7681',
@@ -53,32 +52,28 @@ async function agentsDir($: EngineInterface, cwd: string, top: string | null): P
   return null
 }
 
-async function folderTrack($: EngineInterface, dir: string): Promise<Track | null> {
+async function folderTrack($: EngineInterface, dir: string, branch: string | null): Promise<Track | null> {
+  if (branch === null) return null
   const entries = await $.fs.list(dir)
   const folders = await Promise.all(
     entries.map(async entry => {
       const path = `${dir}/${entry.name}`
       if (entry.kind !== 'dir' && !(entry.isLink && (await isDir($, path)))) return null
-      const files = (await $.fs.list(path)).filter(file => file.kind === 'file')
-      return { name: entry.name, files, newest: Math.max(0, ...files.map(file => file.mtimeMs)) }
+      const files = (await $.fs.list(path)).filter(file => file.kind === 'file').map(file => file.name)
+      const text = async (wanted: string) => {
+        const file = files.find(name => name.toUpperCase() === wanted)
+        return file ? $.fs.read(`${path}/${file}`).catch(() => null) : null
+      }
+      const cycle = await text('CYCLE.MD')
+      return { name: entry.name, files, cycle, text, branches: cycle === null ? [] : parseCycle(cycle).branches }
     }),
   )
   const present = folders.filter(folder => folder !== null)
-  const name = pickTask(present)
+  const name = pickTask(present, branch)
   const folder = present.find(candidate => candidate.name === name)
   if (!name || !folder) return null
 
-  const named = (wanted: string) => folder.files.find(file => file.name.toUpperCase() === wanted)
-  const text = async (wanted: string) => {
-    const file = named(wanted)
-    return file ? $.fs.read(`${dir}/${name}/${file.name}`).catch(() => null) : null
-  }
-
-  return trackFromFolder(name, {
-    files: folder.files.map(file => file.name),
-    cycle: await text('CYCLE.MD'),
-    todo: await text('TODO.MD'),
-  })
+  return trackFromFolder(name, { files: folder.files, cycle: folder.cycle, todo: await folder.text('TODO.MD') })
 }
 
 async function gitState($: EngineInterface, cwd: string): Promise<GitState> {
@@ -95,7 +90,7 @@ async function locate($: EngineInterface): Promise<Where> {
   const top = await git($, cwd, ['rev-parse', '--show-toplevel'])
   const branch = top === null ? null : await git($, cwd, ['branch', '--show-current'])
   const dir = await agentsDir($, cwd, top)
-  const fromFolder = dir === null ? null : await folderTrack($, dir).catch(() => null)
+  const fromFolder = dir === null ? null : await folderTrack($, dir, branch || null).catch(() => null)
   const track = fromFolder ?? (top === null ? null : trackFromGit(await gitState($, cwd)))
 
   return { track, branch: branch || null }
@@ -129,13 +124,18 @@ async function refresh($: EngineInterface): Promise<void> {
   }
   isRefreshing = true
   try {
-    const next = await locate($)
-    await update($, where, () => next)
-    const usd = (await $.session.usage()).cost?.usd
+    const usage = await $.session.usage()
+    const { tokens, percent } = usage.context
+    if (tokens !== undefined) await update($, context, () => ({ tokens, percent: percent ?? null }))
+    const usd = usage.cost?.usd
     if (usd !== undefined) {
       const rate = await gbpPerUsd($)
       await update($, cost, () => ({ usd, gbpPerUsd: rate }))
     }
+  } catch {}
+  try {
+    const next = await locate($)
+    await update($, where, () => next)
   } catch {
   } finally {
     isRefreshing = false
@@ -161,25 +161,18 @@ export const register: Register = on => {
     return result
   })
 
-  on('turn.complete', async ($, e, next) => {
-    const usage = e.usage
-    if (usage) {
-      await update($, tokens, prior => ({
-        input:
-          prior.input + usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens,
-        output: prior.output + usage.output_tokens,
-      }))
-    }
+  on('turn.step', async function* ($, e, next) {
+    const result = yield* next(e)
     void refresh($)
-    return next(e)
+    return result
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
 
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const { Box, Text } = $.ui.resolve(e)
     const { track, branch } = await read($, where)
-    const used = await read($, tokens)
+    const window = await read($, context)
     const spent = await read($, cost)
 
     const glyph: Record<Step['state'], { mark: string; color: string }> = {
@@ -199,25 +192,11 @@ export const register: Register = on => {
       )
     }
 
-    const fill = (phase: Phase) => async () => {
-      const draft = (await $.prompt.read()).text.trim()
-      await $.prompt.fill({ text: `/agent-skills:${phase} ${draft}`.trimEnd() + ' ', mode: 'replace' })
-    }
-
     const label = track?.task ?? (track ? 'Small change' : 'No active task')
     const kind = track?.kind ? ` (${track.kind})` : ''
-    const nextPhase: Phase | null = track ? track.next : 'spec'
 
     return (
-      <Box
-        borderStyle="round"
-        borderColor={GH.border}
-        paddingX={1}
-        flexDirection="row"
-        flexWrap="wrap"
-        justifyContent="space-between"
-        columnGap={3}
-      >
+      <Box key="band" paddingX={1} flexDirection="column">
         <Box flexDirection="row" flexWrap="wrap" columnGap={2} alignItems="center">
           <Text color={GH.fg} bold>
             {label}
@@ -225,26 +204,18 @@ export const register: Register = on => {
             {branch ? <Text color={GH.done}>{`  ${branch}`}</Text> : null}
           </Text>
           {(track?.steps ?? []).map(step)}
-          {nextPhase ? (
-            <Button
-              key="next"
-              label={`${track ? 'Next' : 'Start'}: ${title(nextPhase)} ▸`}
-              variant="primary"
-              onPress={fill(nextPhase)}
-            />
-          ) : (
+          {track && !track.next ? (
             <Text key="shipped" color={GH.success} bold>
               Shipped
             </Text>
-          )}
-          {track?.then ? <Text color={GH.muted}>{`then ${title(track.then)}`}</Text> : null}
+          ) : null}
         </Box>
         <Box flexDirection="row" columnGap={2}>
           <Text color={GH.muted}>
-            Tokens In: <Text color={GH.fg}>{compact(used.input)}</Text>
-          </Text>
-          <Text color={GH.muted}>
-            Tokens Out: <Text color={GH.fg}>{compact(used.output)}</Text>
+            Context:{' '}
+            <Text color={GH.fg}>
+              {window ? `${compact(window.tokens)}${window.percent === null ? '' : ` (${window.percent}%)`}` : '–'}
+            </Text>
           </Text>
           <Text color={GH.muted}>
             Cost: <Text color={GH.attention}>{spent ? money(spent.usd, spent.gbpPerUsd) : '–'}</Text>

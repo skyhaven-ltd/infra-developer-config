@@ -11,7 +11,7 @@ Start every user-facing reply, including progress updates and final answers, wit
 
 Use the agent-skills lifecycle: `/spec`, `/plan`, `/build`, `/review`, `/ship`. At the start of a task, state its size and the phases you will run, and get the user's agreement.
 
-- Once the user agrees, write `.agents/NNN - Name/CYCLE.md`: a `type:` line (`bug`, `small`, `medium` or `large`), then one checklist item per agreed phase in order, named `spec`, `plan`, `test`, `build`, `review` or `ship`, such as `- [ ] build`. Tick each item as its phase finishes. The lifecycle band above the prompt reads it to show the current and next phase.
+- Once the user agrees, write `.agents/NNN - Name/CYCLE.md`: a `type:` line (`bug`, `small`, `medium` or `large`), a `branch:` line naming the task's Git branch (one line per branch if the work spans several), then one checklist item per agreed phase in order, named `spec`, `plan`, `test`, `build`, `review` or `ship`, such as `- [ ] build`. Tick each item as its phase finishes. The lifecycle band above the prompt reads it to show the current and next phase.
 - Small work, such as a bug fix or a change to one or two files, runs the whole lifecycle in one session. Reproduce a bug with a failing test before fixing it.
 - Larger work runs one phase per fresh session. The task folder files, not chat history, carry the work between sessions. Start each session by reading them and `git status`.
 - Use one worktree per task where the repository allows it.

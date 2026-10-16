@@ -18,12 +18,12 @@ export type Track = {
 
 export type Where = { track: Track | null; branch: string | null }
 
-export type Tokens = { input: number; output: number }
+export type Context = { tokens: number; percent: number | null }
 
 export type Cost = { usd: number; gbpPerUsd: number | null }
 
 declare module 'claude-code' {
   interface PluginState {
-    'lifecycle-band': { where: Where; tokens: Tokens; cost: Cost | null }
+    'lifecycle-band': { where: Where; context: Context | null; cost: Cost | null }
   }
 }
