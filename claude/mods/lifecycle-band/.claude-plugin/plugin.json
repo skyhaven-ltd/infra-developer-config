@@ -1,0 +1,7 @@
+{
+  "name": "lifecycle-band",
+  "version": "0.1.0",
+  "author": { "name": "Liam Goodchild" },
+  "description": "GitHub-styled band above the prompt showing the agent-skills phase, the next step and token usage",
+  "types": "./types/index.d.ts"
+}

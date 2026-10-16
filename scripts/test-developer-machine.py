@@ -125,6 +125,7 @@ def inspect(repo, user_root, codex_home, offline=False):
                 checks.append(result(f"{tool} stale skill {installed.name}", "WARN", "Removed from source; rerun installer to remove the managed entry."))
     for name in ("statusline.js", "keybindings.json"):
         checks.append(check_copy(f"Claude {name}", repo / "claude" / name, user_root / ".claude" / name))
+    checks.append(check_copy("Claude mods", repo / "claude/mods", user_root / ".claude/mods"))
     jobs = [("Git", "git", ["--version"], False), ("Codex CLI", "codex", ["--version"], False), ("Claude Code", "claude", ["--version"], False)]
     if os.name == "nt":
         jobs.append(("PowerShell 7", "pwsh", ["--version"], False))

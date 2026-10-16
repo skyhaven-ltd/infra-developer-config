@@ -11,6 +11,7 @@ Start every user-facing reply, including progress updates and final answers, wit
 
 Use the agent-skills lifecycle: `/spec`, `/plan`, `/build`, `/review`, `/ship`. At the start of a task, state its size and the phases you will run, and get the user's agreement.
 
+- Once the user agrees, write `.agents/NNN - Name/CYCLE.md`: a `type:` line (`bug`, `small`, `medium` or `large`), then one checklist item per agreed phase in order, named `spec`, `plan`, `test`, `build`, `review` or `ship`, such as `- [ ] build`. Tick each item as its phase finishes. The lifecycle band above the prompt reads it to show the current and next phase.
 - Small work, such as a bug fix or a change to one or two files, runs the whole lifecycle in one session. Reproduce a bug with a failing test before fixing it.
 - Larger work runs one phase per fresh session. The task folder files, not chat history, carry the work between sessions. Start each session by reading them and `git status`.
 - Use one worktree per task where the repository allows it.
@@ -21,6 +22,7 @@ Everything agent-skills or the agent creates for a task goes under `.agents/` at
 
 | Skill default | Location |
 | --- | --- |
+| Size and agreed phases | `.agents/NNN - Name/CYCLE.md` |
 | `SPEC.md`, `docs/SPEC.md`, `spec/` | `.agents/NNN - Name/SPEC.md` |
 | `tasks/plan.md` | `.agents/NNN - Name/PLAN.md` |
 | `tasks/todo.md` | `.agents/NNN - Name/TODO.md` |
@@ -31,7 +33,7 @@ Everything agent-skills or the agent creates for a task goes under `.agents/` at
 | Anything else: notes, captures, scripts, screenshots | `.agents/NNN - Name/supporting/` |
 
 - `NNN` is three digits: the highest existing task number in `.agents/` plus one. `Name` is a short title case description.
-- Create a task folder only when the first file is needed. Small work often needs none.
+- Create the task folder when `CYCLE.md` is written at the start of the task.
 - If more than one task folder has unchecked items in `TODO.md`, ask which task to work on before acting.
 
 ## 4. Git

@@ -14,6 +14,7 @@ Tracked in version control (enforced by `.gitignore`):
 | ------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
 | `skills/`                             | Claude Code + Codex | Shared skill source; linked into `~/.claude/skills` and `~/.codex/skills/<name>`               |
 | `claude/settings.json`                | Claude Code         | Global tool permissions, plugins and model config                                              |
+| `claude/mods/`                        | Claude Code         | Function-hook mods, linked into `~/.claude/mods`; `lifecycle-band` shows the agent-skills phase |
 | `system/SYSTEM.md`                    | Claude Code + Codex | Canonical global instructions installed under each tool's required filename                    |
 | `codex/config.toml`                   | Codex CLI           | Model, reasoning effort, options                                                               |
 | `scripts/Install-DeveloperConfig.ps1` | All                 | One-shot link creation for a new Windows machine; can install a per-user logon task for itself |

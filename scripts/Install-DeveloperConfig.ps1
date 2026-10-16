@@ -902,6 +902,7 @@ Remove-LegacyAgentsSkillsJunction "$env:USERPROFILE\.agents\skills" "$Repo\skill
 
 Write-Host "`nClaude" -ForegroundColor Cyan
 New-Junction "$claude\docs" "$Repo\docs"
+New-Junction "$claude\mods" "$Repo\claude\mods"
 $systemInstructions = "$Repo\system\SYSTEM.md"
 Remove-ManagedFileLink "$claude\CLAUDE.md" "$Repo\claude\CLAUDE.md" | Out-Null
 New-Symlink "$claude\CLAUDE.md" $systemInstructions

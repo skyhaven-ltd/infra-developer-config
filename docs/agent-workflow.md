@@ -4,11 +4,11 @@ Every change runs through five phases: `/spec`, `/plan`, `/build`, `/review` and
 
 ## 1. Agree the size first
 
-At the start of a task the agent states the size and the phases it will run. Confirm or correct it before work starts.
+At the start of a task the agent states the size and the phases it will run. Confirm or correct it before work starts. The agent then records both in `.agents/NNN - Name/CYCLE.md` and ticks each phase as it finishes.
 
 | Size | Typical work | How to run it |
 | --- | --- | --- |
-| Small | Bug fix, or a change to one or two files with no open decisions | One session. Describe the change; the agent builds, tests, reviews and commits it. Usually no task folder |
+| Small | Bug fix, or a change to one or two files with no open decisions | One session. Describe the change; the agent builds, tests, reviews and commits it. The task folder holds only `CYCLE.md` |
 | Medium | One feature across several files | `/plan`, `/build`, `/review`, `/ship`. Put the short spec in the `/plan` request |
 | Large | Several modules, or requirements still unclear | All five phases, one fresh session each |
 
@@ -43,6 +43,7 @@ Everything the agent creates sits under `.agents/` at the repository root. The g
   ADR/
     001 - Use Durable Functions.md
   001 - NEMS Company Role Validity/
+    CYCLE.md                  size and agreed phases, ticked as each finishes
     SPEC.md
     PLAN.md
     TODO.md
@@ -53,6 +54,7 @@ Everything the agent creates sits under `.agents/` at the repository root. The g
 
 - Task numbers are three digits and increase by one per repository.
 - `TODO.md` is the progress record. Unticked items mean the task is still open.
+- The lifecycle band above the Claude Code prompt shows the newest task's phases, its next phase and the session's tokens and cost. Its Next button puts that phase's command in the prompt. Without `CYCLE.md` it assumes all five phases; with no task folder it reads git state.
 - If two tasks are open, the agent asks which one to work on.
 
 ## 5. Move between sessions

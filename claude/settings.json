@@ -46,6 +46,9 @@
     "type": "command",
     "command": "node \"%USERPROFILE%/.claude/statusline.js\""
   },
+  "env": {
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/lifecycle-band"
+  },
   "respectGitignore": false,
   "skipDangerousModePermissionPrompt": true,
   "switchModelsOnFlag": false
