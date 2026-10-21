@@ -2,6 +2,6 @@
   "name": "lifecycle-band",
   "version": "0.1.0",
   "author": { "name": "Liam Goodchild" },
-  "description": "GitHub-styled band above the prompt showing the agent-skills phase, the next step, context window and cost",
+  "description": "GitHub-styled band above the prompt showing the lifecycle phase, the next step, context window and cost",
   "types": "./types/index.d.ts"
 }

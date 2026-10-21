@@ -128,7 +128,7 @@ The `gh` CLI is not on the bash `PATH` by default. Use the full path:
 
 Defines globally allowed tools. When adding new MCP tool permissions, add them to the `allow` array. The `deny` array is currently empty â€” prefer allowlist-only control.
 
-The agent-skills plugin is enabled under `enabledPlugins` from the `addy-agent-skills` marketplace declared in `extraKnownMarketplaces`. The installer merges both into each Claude profile and adds the same plugin to Codex through the `codex` CLI.
+The lifecycle skills `/scope`, `/build`, `/review`, `/ship` and `/cycle` live in `skills/lifecycle/` and install like any other shared skill. The retired agent-skills plugin is removed from each Claude profile's `enabledPlugins` and `extraKnownMarketplaces` on merge, and from Codex through the `codex` CLI. Other local plugins are kept. Shared `env` keys are added to a profile only when missing.
 
 ## Code Style
 
