@@ -20,26 +20,21 @@
       "TaskOutput",
       "TaskStop",
       "mcp__ide__executeCode",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "mcp__azure",
+      "mcp__ado-highwaysengland",
+      "mcp__ado-cloudaande"
     ],
     "deny": []
-  },
-  "enabledPlugins": {
-    "agent-skills@addy-agent-skills": true
-  },
-  "extraKnownMarketplaces": {
-    "addy-agent-skills": {
-      "source": {
-        "source": "git",
-        "url": "https://github.com/addyosmani/agent-skills.git"
-      }
-    }
   },
   "awaySummaryEnabled": false,
   "model": "opus",
   "modelSettings": {
     "claude-opus-5-5": {
-      "effortLevel": "high"
+      "effortLevel": "medium"
+    },
+    "claude-sonnet-5-5": {
+      "effortLevel": "medium"
     }
   },
   "statusLine": {
@@ -47,7 +42,8 @@
     "command": "node \"%USERPROFILE%/.claude/statusline.js\""
   },
   "env": {
-    "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/lifecycle-band"
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/lifecycle-band",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000"
   },
   "respectGitignore": false,
   "skipDangerousModePermissionPrompt": true,
