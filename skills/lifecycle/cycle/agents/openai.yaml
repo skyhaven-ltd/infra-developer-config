@@ -1,0 +1,7 @@
+interface:
+  display_name: "Cycle"
+  short_description: "Run a task through scope, build, review and ship."
+  default_prompt: "Use $cycle to run this task through the lifecycle."
+
+policy:
+  allow_implicit_invocation: false
