@@ -5,52 +5,95 @@ import { compact, elapsed, money, parseCycle, parseTodo, pickTask, trackFromFold
 const states = (track: ReturnType<typeof trackFromFolder>) => track.steps.map(s => `${s.phase}:${s.state}`)
 
 describe('full cycle from marker files', () => {
-  test('empty folder starts at spec', async () => {
+  test('empty folder starts at scope', async () => {
     const track = trackFromFolder('001 - Empty', { files: [], cycle: null, todo: null })
-    expect(track.next).toBe('spec')
-    expect(track.then).toBe('plan')
+    expect(track.next).toBe('scope')
+    expect(track.then).toBe('build')
   })
 
-  test('SPEC.md means plan is next', async () => {
-    const track = trackFromFolder('001 - A', { files: ['SPEC.md'], cycle: null, todo: null })
-    expect(states(track)).toEqual(['spec:done', 'plan:current', 'build:pending', 'review:pending', 'ship:pending'])
+  test('SCOPE.md means build is next', async () => {
+    const track = trackFromFolder('001 - A', { files: ['SCOPE.md'], cycle: null, todo: null })
+    expect(states(track)).toEqual(['scope:done', 'build:current', 'review:pending', 'ship:pending'])
   })
 
-  test('open TODO items keep build current with progress', async () => {
-    const todo = '- [x] one\n- [x] two\n- [ ] three\n'
-    const track = trackFromFolder('002 - B', { files: ['SPEC.md', 'PLAN.md', 'TODO.md'], cycle: null, todo })
+  test('a legacy PLAN.md also finishes scope', async () => {
+    const track = trackFromFolder('001 - A', { files: ['SPEC.md', 'PLAN.md'], cycle: null, todo: null })
     expect(track.next).toBe('build')
-    expect(track.steps[2]?.progress).toEqual({ done: 2, total: 3 })
   })
 
-  test('all TODO items ticked moves to review', async () => {
+  test('a legacy SPEC.md alone keeps scope current', async () => {
+    const track = trackFromFolder('001 - A', { files: ['SPEC.md'], cycle: null, todo: null })
+    expect(track.next).toBe('scope')
+  })
+
+  test('open BUILD items keep build current with progress', async () => {
+    const build = '- [x] one\n- [x] two\n- [ ] three\n'
+    const track = trackFromFolder('002 - B', { files: ['SCOPE.md', 'BUILD.md'], cycle: null, build, todo: null })
+    expect(track.next).toBe('build')
+    expect(track.steps[1]?.progress).toEqual({ done: 2, total: 3 })
+  })
+
+  test('BUILD.md wins over a legacy TODO.md', async () => {
+    const track = trackFromFolder('002 - B', {
+      files: ['SCOPE.md', 'BUILD.md', 'TODO.md'],
+      cycle: null,
+      build: '- [ ] one\n',
+      todo: '- [x] one\n',
+    })
+    expect(track.next).toBe('build')
+    expect(track.steps[1]?.progress).toEqual({ done: 0, total: 1 })
+  })
+
+  test('a legacy TODO.md counts when there is no BUILD.md', async () => {
     const todo = '- [x] one\r\n* [X] two\r\n'
     const track = trackFromFolder('002 - B', { files: ['SPEC.md', 'PLAN.md', 'TODO.md'], cycle: null, todo })
     expect(track.next).toBe('review')
     expect(track.then).toBe('ship')
   })
 
-  test('REVIEW.md without a spec marks earlier phases skipped', async () => {
+  test('all BUILD items ticked moves to review', async () => {
+    const build = '- [x] one\r\n* [X] two\r\n'
+    const track = trackFromFolder('002 - B', { files: ['SCOPE.md', 'BUILD.md'], cycle: null, build, todo: null })
+    expect(track.next).toBe('review')
+  })
+
+  test('REVIEW.md without a scope marks earlier phases skipped', async () => {
     const track = trackFromFolder('003 - C', { files: ['REVIEW.md'], cycle: null, todo: null })
-    expect(states(track)).toEqual(['spec:skipped', 'plan:skipped', 'build:skipped', 'review:done', 'ship:current'])
+    expect(states(track)).toEqual(['scope:skipped', 'build:skipped', 'review:done', 'ship:current'])
   })
 
   test('SHIP.md finishes the cycle', async () => {
-    const track = trackFromFolder('003 - C', { files: ['SPEC.md', 'PLAN.md', 'REVIEW.md', 'SHIP.md'], cycle: null, todo: '- [x] a' })
+    const track = trackFromFolder('003 - C', {
+      files: ['SCOPE.md', 'BUILD.md', 'REVIEW.md', 'SHIP.md'],
+      cycle: null,
+      build: '- [x] a',
+      todo: null,
+    })
     expect(track.next).toBeNull()
     expect(track.then).toBeNull()
   })
 
   test('marker names match case-insensitively', async () => {
-    const track = trackFromFolder('004 - D', { files: ['spec.md'], cycle: null, todo: null })
-    expect(track.next).toBe('plan')
+    const track = trackFromFolder('004 - D', { files: ['scope.md'], cycle: null, todo: null })
+    expect(track.next).toBe('build')
   })
 })
 
 describe('CYCLE.md picks the phases', () => {
   test('checklist form sets kind, phases and ticks', async () => {
-    const cycle = parseCycle('type: Bug\n- [x] test\n- [ ] build\n- [ ] review\n- [ ] ship\n')
-    expect(cycle).toEqual({ kind: 'bug', branches: [], phases: ['test', 'build', 'review', 'ship'], ticked: ['test'] })
+    const cycle = parseCycle('type: Bug\n- [x] build\n- [ ] review\n- [ ] ship\n')
+    expect(cycle).toEqual({ kind: 'bug', branches: [], phases: ['build', 'review', 'ship'], ticked: ['build'] })
+  })
+
+  test('legacy phase names fold into scope and build', async () => {
+    const cycle = parseCycle('type: medium\n- [x] spec\n- [x] plan\n- [x] test\n- [ ] build\n- [ ] review\n')
+    expect(cycle.phases).toEqual(['scope', 'build', 'review'])
+    expect(cycle.ticked).toEqual(['scope'])
+  })
+
+  test('a folded phase is ticked only when every legacy item is', async () => {
+    expect(parseCycle('- [x] spec\n- [ ] plan\n- [ ] build\n').ticked).toEqual([])
+    expect(parseCycle('- [x] test\n- [x] build\n').ticked).toEqual(['build'])
   })
 
   test('branch lines bind the task to its branches', async () => {
@@ -61,14 +104,19 @@ describe('CYCLE.md picks the phases', () => {
 
   test('phases line form', async () => {
     expect(parseCycle('type: small\nphases: /build, /review → ship').phases).toEqual(['build', 'review', 'ship'])
+    expect(parseCycle('phases: spec, plan, build').phases).toEqual(['scope', 'build'])
+  })
+
+  test('unknown words are not phases', async () => {
+    expect(parseCycle('- [x] constructor\n- [ ] deploy\n- [ ] ship\n').phases).toEqual(['ship'])
   })
 
   test('bug cycle shows only its phases and the next one', async () => {
-    const cycle = 'type: bug\n- [x] test\n- [ ] build\n- [ ] review\n- [ ] ship\n'
+    const cycle = 'type: bug\n- [x] build\n- [ ] review\n- [ ] ship\n'
     const track = trackFromFolder('005 - Bug', { files: ['CYCLE.md'], cycle, todo: null })
     expect(track.kind).toBe('bug')
-    expect(states(track)).toEqual(['test:done', 'build:current', 'review:pending', 'ship:pending'])
-    expect(track.next).toBe('build')
+    expect(states(track)).toEqual(['build:done', 'review:current', 'ship:pending'])
+    expect(track.next).toBe('review')
   })
 
   test('marker file counts as done even when unticked', async () => {
@@ -79,7 +127,7 @@ describe('CYCLE.md picks the phases', () => {
 
   test('CYCLE.md with no phases falls back to the full cycle', async () => {
     const track = trackFromFolder('007 - F', { files: ['CYCLE.md'], cycle: 'type: large', todo: null })
-    expect(track.steps.length).toBe(5)
+    expect(track.steps.length).toBe(4)
     expect(track.kind).toBe('large')
   })
 })

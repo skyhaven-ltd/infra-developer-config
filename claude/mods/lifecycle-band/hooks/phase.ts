@@ -1,19 +1,26 @@
 import type { Phase, Step, Track } from '../types'
 
-export const FULL_CYCLE: Phase[] = ['spec', 'plan', 'build', 'review', 'ship']
+export const FULL_CYCLE: Phase[] = ['scope', 'build', 'review', 'ship']
 
-const ALL_PHASES: Phase[] = ['spec', 'plan', 'test', 'build', 'review', 'ship']
+const NAMES = new Map<string, Phase>([
+  ['scope', 'scope'],
+  ['spec', 'scope'],
+  ['plan', 'scope'],
+  ['test', 'build'],
+  ['build', 'build'],
+  ['review', 'review'],
+  ['ship', 'ship'],
+])
 
-const MARKERS: Partial<Record<Phase, string>> = {
-  spec: 'SPEC.md',
-  plan: 'PLAN.md',
-  review: 'REVIEW.md',
-  ship: 'SHIP.md',
+const MARKERS: Partial<Record<Phase, string[]>> = {
+  scope: ['SCOPE.md', 'PLAN.md'],
+  review: ['REVIEW.md'],
+  ship: ['SHIP.md'],
 }
 
 const TASK_NAME = /^\d{3} - .+/
 
-const isPhase = (word: string): word is Phase => (ALL_PHASES as string[]).includes(word)
+const toPhase = (word: string): Phase | null => NAMES.get(word) ?? null
 
 export type Cycle = { kind: string | null; branches: string[]; phases: Phase[]; ticked: Phase[] }
 
@@ -22,6 +29,7 @@ export function parseCycle(text: string): Cycle {
   const branches: string[] = []
   const phases: Phase[] = []
   const ticked: Phase[] = []
+  const open: Phase[] = []
 
   for (const line of text.split(/\r?\n/)) {
     const type = /^\s*type\s*:\s*(.+?)\s*$/i.exec(line)
@@ -39,21 +47,22 @@ export function parseCycle(text: string): Cycle {
     const list = /^\s*phases\s*:\s*(.+)$/i.exec(line)
     if (list?.[1]) {
       for (const word of list[1].split(/[,\s→>]+/)) {
-        const phase = word.trim().toLowerCase().replace(/^\//, '')
-        if (isPhase(phase) && !phases.includes(phase)) phases.push(phase)
+        const phase = toPhase(word.trim().toLowerCase().replace(/^\//, ''))
+        if (phase && !phases.includes(phase)) phases.push(phase)
       }
       continue
     }
 
     const item = /^\s*[-*]\s*\[([ xX])\]\s*\/?([a-zA-Z]+)/.exec(line)
-    const phase = item?.[2]?.toLowerCase()
-    if (item && phase && isPhase(phase)) {
+    const phase = item?.[2] ? toPhase(item[2].toLowerCase()) : null
+    if (item && phase) {
       if (!phases.includes(phase)) phases.push(phase)
-      if (item[1] !== ' ' && !ticked.includes(phase)) ticked.push(phase)
+      const bucket = item[1] === ' ' ? open : ticked
+      if (!bucket.includes(phase)) bucket.push(phase)
     }
   }
 
-  return { kind, branches, phases, ticked }
+  return { kind, branches, phases, ticked: ticked.filter(phase => !open.includes(phase)) }
 }
 
 export function parseTodo(text: string): { done: number; total: number } {
@@ -70,18 +79,18 @@ export function parseTodo(text: string): { done: number; total: number } {
   return { done, total }
 }
 
-export type Folder = { files: string[]; cycle: string | null; todo: string | null }
+export type Folder = { files: string[]; cycle: string | null; build?: string | null; todo: string | null }
 
 export function trackFromFolder(task: string, folder: Folder): Track {
   const cycle = folder.cycle === null ? null : parseCycle(folder.cycle)
   const phases = cycle && cycle.phases.length > 0 ? cycle.phases : FULL_CYCLE
   const files = new Set(folder.files.map(name => name.toUpperCase()))
-  const todo = folder.todo === null ? null : parseTodo(folder.todo)
+  const checklist = folder.build ?? folder.todo
+  const todo = checklist == null ? null : parseTodo(checklist)
 
   const isDone = (phase: Phase): boolean => {
     if (cycle?.ticked.includes(phase)) return true
-    const marker = MARKERS[phase]
-    if (marker && files.has(marker.toUpperCase())) return true
+    if (MARKERS[phase]?.some(marker => files.has(marker.toUpperCase()))) return true
     return phase === 'build' && todo !== null && todo.total > 0 && todo.done === todo.total
   }
 
