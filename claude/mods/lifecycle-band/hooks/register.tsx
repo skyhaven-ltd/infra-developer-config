@@ -278,7 +278,7 @@ export const register: Register = on => {
     const kind = track?.kind ? ` (${track.kind})` : ''
     const name = (text: string) => `${text}:`.padEnd(LABEL_WIDTH)
 
-    const fixed = 6 + (branch ? 1 : 0) + (track ? 1 : 0)
+    const fixed = 4 + (branch || track ? 1 : 0)
     const room = Math.max(1, e.props.maxRows - fixed)
     const crew = crewRadar.crew
     const shown = crew.length <= room ? crew : crew.slice(0, room - 1)
@@ -306,46 +306,46 @@ export const register: Register = on => {
       <Box
         key="band"
         paddingX={1}
-        marginTop={1}
         borderStyle="round"
         borderColor={GH.muted}
         alignSelf="flex-start"
         flexDirection="column"
       >
-        <Text color={GH.muted}>
-          {name('Task')}
-          <Text color={GH.fg} bold>
-            {label}
-          </Text>
-          {kind}
-        </Text>
-        {branch ? (
-          <Text color={GH.muted}>
-            {name('Branch')}
-            <Text color={GH.done}>{branch}</Text>
-          </Text>
-        ) : null}
-        {track ? (
-          <Box flexDirection="row">
-            <Text color={GH.muted}>{name('Stage')}</Text>
-            <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
-              {track.steps.map(step)}
-              {!track.next ? (
-                <Text key="shipped" color={GH.success} bold>
-                  Shipped
-                </Text>
-              ) : null}
-            </Box>
+        <Box key="summary" flexDirection="row" flexWrap="wrap" columnGap={3}>
+          <Box key="left" flexDirection="column">
+            <Text color={GH.muted}>
+              {name('Task')}
+              <Text color={GH.fg} bold>
+                {label}
+              </Text>
+              {kind}
+            </Text>
+            {branch ? (
+              <Text color={GH.muted}>
+                {name('Branch')}
+                <Text color={GH.done}>{branch}</Text>
+              </Text>
+            ) : null}
           </Box>
-        ) : null}
-        <Text color={GH.muted}>
-          {name('Context')}
-          <Text color={GH.fg}>
-            {window ? `${compact(window.tokens)}${window.percent === null ? '' : ` (${window.percent}%)`}` : '–'}
-          </Text>
-          {' | Cost: '}
-          <Text color={GH.attention}>{spent ? money(spent.usd, spent.gbpPerUsd) : '–'}</Text>
-        </Text>
+          <Box key="right" flexDirection="column">
+            {track ? (
+              <Box flexDirection="row">
+                <Text color={GH.muted}>{name('Stage')}</Text>
+                <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+                  {track.steps.map(step)}
+                </Box>
+              </Box>
+            ) : null}
+            <Text color={GH.muted}>
+              {name('Context')}
+              <Text color={GH.fg}>
+                {window ? `${compact(window.tokens)}${window.percent === null ? '' : ` (${window.percent}%)`}` : '–'}
+              </Text>
+              {' | Cost: '}
+              <Text color={GH.attention}>{spent ? money(spent.usd, spent.gbpPerUsd) : '–'}</Text>
+            </Text>
+          </Box>
+        </Box>
         {crew.length > 0 ? (
           <Box flexDirection="row">
             <Text color={GH.muted}>{name('Agents')}</Text>

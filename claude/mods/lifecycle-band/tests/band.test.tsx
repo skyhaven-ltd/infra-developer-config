@@ -1,3 +1,4 @@
+import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 const BAND = {
@@ -21,9 +22,51 @@ test('band draws on the terminal with no task and no button', async $ => {
   await ui.unmount()
 })
 
-test('usage sits on its own row under the task', async $ => {
+function shippedRepo(on: On): void {
+  const file = (name: string, kind: 'file' | 'dir') => ({ name, kind, size: 0, mtimeMs: 0, isLink: false })
+  on('session.cwd', () => ({ value: '/repo' }) as never)
+  on('session.repo', () => ({ value: null }) as never)
+  on('process.run', (_$, e) => {
+    const stdout = e.argv[1] === 'rev-parse' ? '/repo' : e.argv[1] === 'branch' ? 'minor/done' : ''
+    return { value: { exitCode: stdout ? 0 : 1, stdout, stderr: '', isStdoutTruncated: false } } as never
+  })
+  on('fs.stat', () => ({ value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false } }) as never)
+  on('fs.list', (_$, e) => ({
+    value: /[\\/]\.agents$/.test(e.path) ?[file('001 - Done', 'dir')] : [file('CYCLE.md', 'file')],
+  }) as never)
+  on('fs.read', () => ({ value: 'type: small\nbranch: minor/done\n\n- [x] build\n- [x] review\n- [x] ship\n' }) as never)
+  on('turn.step', async function* () {
+    return { turnId: 't', index: 0, answer: '', toolUses: [], stopReason: 'end_turn' } as never
+  })
+}
+
+test('task and branch sit in a left column beside stage and usage on the right', async $ => {
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await ui.find({ key: 'band' }))?.props.flexDirection).toBe('column')
+  const summary = await ui.find({ key: 'summary' })
+  expect(summary?.props.flexDirection).toBe('row')
+  expect(summary?.props.flexWrap).toBe('wrap')
+  expect((await ui.find({ key: 'left' }))?.props.flexDirection).toBe('column')
+  expect((await ui.find({ key: 'right' }))?.props.flexDirection).toBe('column')
+  await ui.unmount()
+})
+
+test('band sits flush against the transcript above', async $ => {
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find({ key: 'band' }))?.props.marginTop).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a shipped task ticks Ship without a separate Shipped badge', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  shippedRepo(on)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  for await (const _ of $.turn.step({ turnId: 't', index: 0, model: 'm', messageCount: 1 })) {
+  }
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^✓ Ship$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Shipped/ })).toBeUndefined()
   await ui.unmount()
 })
 
