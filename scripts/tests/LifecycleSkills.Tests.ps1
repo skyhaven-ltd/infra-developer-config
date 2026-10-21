@@ -53,7 +53,7 @@ foreach ($skill in $expectedSkills) {
 
         It "writes its own artefact" {
             $text = Get-Content -LiteralPath $skillFile -Raw -ErrorAction SilentlyContinue
-            $writes = [regex]::Match($text, "(?ms)^## Writes\r?$(.*?)(?=^## |\z)").Groups[1].Value
+            $writes = [regex]::Match($text, '(?ms)^## Writes\r?$(.*?)(?=^## |\z)').Groups[1].Value
             $writes | Should Match ([regex]::Escape("$($skill.ToUpperInvariant()).md"))
         }
     }
