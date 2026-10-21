@@ -1,4 +1,4 @@
-export type Phase = 'spec' | 'plan' | 'test' | 'build' | 'review' | 'ship'
+export type Phase = 'scope' | 'build' | 'review' | 'ship'
 
 export type StepState = 'done' | 'current' | 'skipped' | 'pending'
 

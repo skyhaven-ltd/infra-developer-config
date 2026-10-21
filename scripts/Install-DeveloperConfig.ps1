@@ -473,6 +473,25 @@ function Merge-ClaudeSettings {
         }
     }
 
+    if ($sourceSettings.PSObject.Properties.Name -contains "env") {
+        $mergedEnv = ConvertTo-OrderedJsonObject $merged["env"]
+        foreach ($property in $sourceSettings.env.PSObject.Properties) {
+            if (-not $mergedEnv.Contains($property.Name)) {
+                $mergedEnv[$property.Name] = $property.Value
+            }
+        }
+        $merged["env"] = $mergedEnv
+    }
+
+    $retiredSettings = [ordered]@{ enabledPlugins = "agent-skills@addy-agent-skills"; extraKnownMarketplaces = "addy-agent-skills" }
+    foreach ($section in $retiredSettings.Keys) {
+        if ($merged.Contains($section)) {
+            $entries = ConvertTo-OrderedJsonObject $merged[$section]
+            $entries.Remove($retiredSettings[$section])
+            $merged[$section] = $entries
+        }
+    }
+
     # Shared hooks replace local hooks only when the shared settings define
     # them; otherwise local hooks, such as Orca's, are preserved.
     if ($sourceSettings.PSObject.Properties.Name -contains "hooks") {
@@ -721,44 +740,40 @@ function Set-ObsidianVaultPath {
     }
 }
 
-function Install-CodexAgentSkills {
+function Remove-CodexAgentSkills {
     $codexCli = Get-Command codex -ErrorAction SilentlyContinue
     if (-not $codexCli) {
-        Write-Host "  [warn] codex CLI not found; agent-skills plugin not installed for Codex" -ForegroundColor Yellow
+        Write-Host "  [skip] codex CLI not found; no agent-skills plugin to remove" -ForegroundColor DarkGray
         return
-    }
-
-    $marketplaceJson = & $codexCli.Source plugin marketplace list --json
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  [warn] codex plugin marketplace list failed; agent-skills plugin not installed for Codex" -ForegroundColor Yellow
-        return
-    }
-    if (@(($marketplaceJson | Out-String | ConvertFrom-Json).marketplaces | Where-Object { $_.name -eq "agent-skills" }).Count -gt 0) {
-        Write-Host "  [skip] Codex marketplace agent-skills already registered" -ForegroundColor DarkGray
-    } else {
-        & $codexCli.Source plugin marketplace add addyosmani/agent-skills
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "  [warn] codex plugin marketplace add addyosmani/agent-skills failed" -ForegroundColor Yellow
-            return
-        }
-        Write-Host "  [plugin] Codex marketplace agent-skills <= addyosmani/agent-skills" -ForegroundColor Green
     }
 
     $pluginJson = & $codexCli.Source plugin list --json
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  [warn] codex plugin list failed; agent-skills plugin not installed for Codex" -ForegroundColor Yellow
+        Write-Host "  [warn] codex plugin list failed; agent-skills plugin not checked" -ForegroundColor Yellow
         return
     }
     if (@(($pluginJson | Out-String | ConvertFrom-Json).installed | Where-Object { $_.pluginId -eq "agent-skills@agent-skills" }).Count -gt 0) {
-        Write-Host "  [skip] Codex plugin agent-skills@agent-skills already installed" -ForegroundColor DarkGray
-        return
+        & $codexCli.Source plugin remove agent-skills@agent-skills
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [warn] codex plugin remove agent-skills@agent-skills failed" -ForegroundColor Yellow
+            return
+        }
+        Write-Host "  [remove] Codex plugin agent-skills@agent-skills" -ForegroundColor Green
     }
-    & $codexCli.Source plugin add agent-skills@agent-skills
+
+    $marketplaceJson = & $codexCli.Source plugin marketplace list --json
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  [warn] codex plugin add agent-skills@agent-skills failed" -ForegroundColor Yellow
+        Write-Host "  [warn] codex plugin marketplace list failed; agent-skills marketplace not checked" -ForegroundColor Yellow
         return
     }
-    Write-Host "  [plugin] Codex plugin agent-skills@agent-skills installed" -ForegroundColor Green
+    if (@(($marketplaceJson | Out-String | ConvertFrom-Json).marketplaces | Where-Object { $_.name -eq "agent-skills" }).Count -gt 0) {
+        & $codexCli.Source plugin marketplace remove agent-skills
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [warn] codex plugin marketplace remove agent-skills failed" -ForegroundColor Yellow
+            return
+        }
+        Write-Host "  [remove] Codex marketplace agent-skills" -ForegroundColor Green
+    }
 }
 
 function ConvertTo-TaskArgument {
@@ -925,7 +940,7 @@ Remove-ManagedFileLink "$codex\instructions.md" "$Repo\codex\instructions.md" | 
 Remove-ManagedFileLink "$codex\AGENTS.md" "$Repo\codex\AGENTS.md" | Out-Null
 New-Symlink "$codex\AGENTS.md" $systemInstructions
 Merge-CodexConfig "$Repo\codex\config.toml" "$codex\config.toml"
-Install-CodexAgentSkills
+Remove-CodexAgentSkills
 
 # -- Obsidian ----------------------------------------------------------------
 

@@ -9,32 +9,30 @@ Start every user-facing reply, including progress updates and final answers, wit
 
 ## 2. Workflow
 
-Use the agent-skills lifecycle: `/spec`, `/plan`, `/build`, `/review`, `/ship`. At the start of a task, state its size and the phases you will run, and get the user's agreement.
+Use the lifecycle skills: `/scope`, `/build`, `/review`, `/ship`, or `/cycle` to run them all from one session. At the start of a task, state its size and the phases you will run, and get the user's agreement.
 
-- Once the user agrees, write `.agents/NNN - Name/CYCLE.md`: a `type:` line (`bug`, `small`, `medium` or `large`), a `branch:` line naming the task's Git branch (one line per branch if the work spans several), then one checklist item per agreed phase in order, named `spec`, `plan`, `test`, `build`, `review` or `ship`, such as `- [ ] build`. Tick each item as its phase finishes. The lifecycle band above the prompt reads it to show the current and next phase.
+- Once the user agrees, write `.agents/NNN - Name/CYCLE.md`: a `type:` line (`bug`, `small`, `medium` or `large`), a `branch:` line naming the task's Git branch (one line per branch if the work spans several), then one checklist item per agreed phase in order, named `scope`, `build`, `review` or `ship`, such as `- [ ] build`. Tick each item as its phase finishes. The lifecycle band above the prompt reads it to show the current and next phase.
 - Small work, such as a bug fix or a change to one or two files, runs the whole lifecycle in one session. Reproduce a bug with a failing test before fixing it.
-- Larger work runs one phase per fresh session. The task folder files, not chat history, carry the work between sessions. Start each session by reading them and `git status`.
+- Larger work runs one phase per fresh session, or one subagent per phase under `/cycle`. The task folder files, not chat history, carry the work between sessions. Each phase skill reads the files it needs, so a fresh session needs only the phase command.
 - Use one worktree per task where the repository allows it.
 
 ## 3. Task artefacts
 
-Everything agent-skills or the agent creates for a task goes under `.agents/` at the repository root. `.agents/` is globally Git-ignored; never commit it. These locations override every path named in a skill or command:
+Everything the lifecycle skills or the agent create for a task goes under `.agents/` at the repository root. `.agents/` is globally Git-ignored; never commit it. These locations override every path named in a skill or command:
 
-| Skill default | Location |
+| Artefact | Location |
 | --- | --- |
 | Size and agreed phases | `.agents/NNN - Name/CYCLE.md` |
-| `SPEC.md`, `docs/SPEC.md`, `spec/` | `.agents/NNN - Name/SPEC.md` |
-| `tasks/plan.md` | `.agents/NNN - Name/PLAN.md` |
-| `tasks/todo.md` | `.agents/NNN - Name/TODO.md` |
-| Review output | `.agents/NNN - Name/REVIEW.md` |
-| Ship decision | `.agents/NNN - Name/SHIP.md` |
+| Requirements and task list, from `/scope` | `.agents/NNN - Name/SCOPE.md` |
+| Build checklist and progress, from `/build` | `.agents/NNN - Name/BUILD.md` |
+| Review verdict, from `/review` | `.agents/NNN - Name/REVIEW.md` |
+| Ship record, from `/ship` | `.agents/NNN - Name/SHIP.md` |
 | `CONSTRAINTS.md` | `.agents/CONSTRAINTS.md` |
-| `docs/adr/` | `.agents/ADR/NNN - Title.md` |
 | Anything else: notes, captures, scripts, screenshots | `.agents/NNN - Name/supporting/` |
 
 - `NNN` is three digits: the highest existing task number in `.agents/` plus one. `Name` is a short title case description.
 - Create the task folder when `CYCLE.md` is written at the start of the task.
-- If more than one task folder has unchecked items in `TODO.md`, ask which task to work on before acting.
+- If more than one task folder has unticked phases in `CYCLE.md`, ask which task to work on before acting.
 
 ## 4. Git
 

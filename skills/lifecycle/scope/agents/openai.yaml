@@ -1,0 +1,7 @@
+interface:
+  display_name: "Scope"
+  short_description: "Agree requirements and break work into tasks in SCOPE.md."
+  default_prompt: "Use $scope to scope this task into SCOPE.md."
+
+policy:
+  allow_implicit_invocation: false

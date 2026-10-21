@@ -1,0 +1,7 @@
+interface:
+  display_name: "Review"
+  short_description: "Review the task branch and decide GO or NO-GO in REVIEW.md."
+  default_prompt: "Use $review to review this branch."
+
+policy:
+  allow_implicit_invocation: false

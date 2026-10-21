@@ -1,0 +1,7 @@
+interface:
+  display_name: "Ship"
+  short_description: "Push a reviewed branch and open its pull request."
+  default_prompt: "Use $ship to push this reviewed branch and open the pull request."
+
+policy:
+  allow_implicit_invocation: false

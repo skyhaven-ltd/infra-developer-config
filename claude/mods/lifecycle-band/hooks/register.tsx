@@ -83,7 +83,12 @@ async function folderTrack($: EngineInterface, dir: string, branch: string | nul
   const folder = present.find(candidate => candidate.name === name)
   if (!name || !folder) return null
 
-  return trackFromFolder(name, { files: folder.files, cycle: folder.cycle, todo: await folder.text('TODO.MD') })
+  return trackFromFolder(name, {
+    files: folder.files,
+    cycle: folder.cycle,
+    build: await folder.text('BUILD.MD'),
+    todo: await folder.text('TODO.MD'),
+  })
 }
 
 async function gitState($: EngineInterface, cwd: string): Promise<GitState> {

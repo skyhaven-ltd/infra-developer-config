@@ -172,6 +172,36 @@ Merge-ClaudeSettings $source $fresh
 if ((Get-Content $fresh -Raw | ConvertFrom-Json).model -ne "shared-model") { throw "Missing initial model default." }
 ''')
 
+    def test_claude_settings_merge_retires_agent_skills_and_adds_missing_env(self):
+        self.run_installer_functions(r'''
+$source = Join-Path $Fixture "shared.json"
+$local = Join-Path $Fixture "local.json"
+@'
+{
+  "permissions": { "allow": ["Read"] },
+  "env": { "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000", "SHARED": "shared" }
+}
+'@ | Set-Content $source
+@'
+{
+  "enabledPlugins": { "agent-skills@addy-agent-skills": true, "skins@hellosverre-mods": true },
+  "extraKnownMarketplaces": { "addy-agent-skills": { "source": { "source": "git", "url": "x" } }, "hellosverre-mods": { "source": { "source": "git", "url": "y" } } },
+  "env": { "SHARED": "local" }
+}
+'@ | Set-Content $local
+Merge-ClaudeSettings $source $local
+$merged = Get-Content $local -Raw | ConvertFrom-Json
+if ($merged.enabledPlugins.PSObject.Properties.Name -contains "agent-skills@addy-agent-skills") { throw "Retired plugin is still enabled." }
+if ($merged.extraKnownMarketplaces.PSObject.Properties.Name -contains "addy-agent-skills") { throw "Retired marketplace is still known." }
+if (-not $merged.enabledPlugins."skins@hellosverre-mods") { throw "Local plugin was removed." }
+if (-not $merged.extraKnownMarketplaces."hellosverre-mods") { throw "Local marketplace was removed." }
+if ($merged.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW -ne "200000") { throw "Missing shared env key was not added." }
+if ($merged.env.SHARED -ne "local") { throw "Local env value was overwritten." }
+$first = Get-Content $local -Raw
+Merge-ClaudeSettings $source $local
+if ((Get-Content $local -Raw) -ne $first) { throw "Second merge changed the settings." }
+''')
+
 
 if __name__ == "__main__":
     unittest.main()

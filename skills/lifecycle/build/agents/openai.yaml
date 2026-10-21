@@ -1,0 +1,7 @@
+interface:
+  display_name: "Build"
+  short_description: "Build the next scoped task test-first and tick BUILD.md."
+  default_prompt: "Use $build to implement the next task."
+
+policy:
+  allow_implicit_invocation: false
