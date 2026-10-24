@@ -41,6 +41,24 @@
     "type": "command",
     "command": "node \"%USERPROFILE%/.claude/statusline.js\""
   },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|WebFetch|mcp__github__.*|mcp__ado-.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"%USERPROFILE%/.claude/hooks/guardrails.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "env": {
     "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/lifecycle-band",
     "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000"

@@ -15,6 +15,7 @@ Tracked in version control (enforced by `.gitignore`):
 | `skills/`                             | Claude Code + Codex | Shared skill source; linked into `~/.claude/skills` and `~/.codex/skills/<name>`               |
 | `claude/settings.json`                | Claude Code         | Global tool permissions, plugins and model config                                              |
 | `claude/mods/`                        | Claude Code         | Function-hook mods, linked into `~/.claude/mods`; `lifecycle-band` shows the lifecycle phase    |
+| `claude/hooks/`                       | Claude Code         | Hook scripts, linked into `~/.claude/hooks`; `guardrails.js` enforces branch names, no AI attribution, no `.agents/` commits and MCP-first service access |
 | `system/SYSTEM.md`                    | Claude Code + Codex | Canonical global instructions installed under each tool's required filename                    |
 | `codex/config.toml`                   | Codex CLI           | Model, reasoning effort, options                                                               |
 | `scripts/Install-DeveloperConfig.ps1` | All                 | One-shot link creation for a new Windows machine; can install a per-user logon task for itself |
@@ -145,7 +146,7 @@ The `gh` CLI is not on the bash `PATH` by default. Use the full path:
 
 Defines globally allowed tools. When adding new MCP tool permissions, add them to the `allow` array. The `deny` array is currently empty â€” prefer allowlist-only control.
 
-The lifecycle skills `/scope`, `/build`, `/review`, `/ship` and `/cycle` live in `skills/lifecycle/` and install like any other shared skill. The retired agent-skills plugin is removed from each Claude profile's `enabledPlugins` and `extraKnownMarketplaces` on merge, and from Codex through the `codex` CLI. Other local plugins are kept. Shared `env` keys are added to a profile only when missing.
+The lifecycle skills `/scope`, `/build`, `/review`, `/ship` and `/cycle` live in `skills/lifecycle/` and install like any other shared skill. The retired agent-skills plugin is removed from each Claude profile's `enabledPlugins` and `extraKnownMarketplaces` on merge, and from Codex through the `codex` CLI. Other local plugins are kept. Shared `env` keys are added to a profile only when missing. Shared `hooks` are added alongside local hooks such as Orca's; handlers that run a `claude/hooks/` script are replaced on each merge, so re-running the installer never duplicates them. Orca Claude profiles under `%APPDATA%\orca\claude-profiles\*\home` receive the same settings merge.
 
 ## Code Style
 

@@ -492,10 +492,23 @@ function Merge-ClaudeSettings {
         }
     }
 
-    # Shared hooks replace local hooks only when the shared settings define
-    # them; otherwise local hooks, such as Orca's, are preserved.
-    if ($sourceSettings.PSObject.Properties.Name -contains "hooks") {
-        $merged["hooks"] = $sourceSettings.hooks
+    # Shared hooks are added alongside local hooks, such as Orca's. Handlers
+    # that run a script from the shared hooks folder are replaced on each merge.
+    $managedScripts = @(Get-ChildItem -LiteralPath (Join-Path (Split-Path $Source) "hooks") -File -ErrorAction SilentlyContinue | ForEach-Object { "/.claude/hooks/$($_.Name)" })
+    $sharedHooks = ConvertTo-OrderedJsonObject $sourceSettings.hooks
+    if ($managedScripts.Count -or $sharedHooks.Count) {
+        $localHooks = ConvertTo-OrderedJsonObject $merged["hooks"]
+        $mergedHooks = [ordered]@{}
+        foreach ($eventName in @($localHooks.Keys) + @($sharedHooks.Keys | Where-Object { -not $localHooks.Contains($_) })) {
+            $entries = @(@($localHooks[$eventName]) | Where-Object {
+                $_ -and -not @($_.hooks | Where-Object {
+                    $command = ([string]$_.command).Replace("\", "/")
+                    @($managedScripts | Where-Object { $command.Contains($_) }).Count
+                }).Count
+            }) + @($sharedHooks[$eventName] | Where-Object { $_ })
+            if ($entries.Count) { $mergedHooks[$eventName] = $entries }
+        }
+        $merged["hooks"] = $mergedHooks
     }
 
     # Hook and status line commands are not run through cmd, so %USERPROFILE%
@@ -923,13 +936,17 @@ Remove-ManagedFileLink "$claude\CLAUDE.md" "$Repo\claude\CLAUDE.md" | Out-Null
 New-Symlink "$claude\CLAUDE.md" $systemInstructions
 New-Symlink "$claude\statusline.js" "$Repo\claude\statusline.js"
 New-Symlink "$claude\keybindings.json" "$Repo\claude\keybindings.json"
+Get-ChildItem -LiteralPath "$Repo\claude\hooks" -File -ErrorAction SilentlyContinue | ForEach-Object {
+    New-Symlink "$claude\hooks\$($_.Name)" $_.FullName
+}
 $extraClaudeProfileDirectories = @(
     "$env:USERPROFILE\.claude-work"
     "$env:USERPROFILE\.claude-personal"
 )
+$orcaClaudeProfileDirectories = @(Get-ChildItem -Path "$env:APPDATA\orca\claude-profiles\*\home" -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
 Copy-ClaudeInstructions $systemInstructions $extraClaudeProfileDirectories
 Merge-ClaudeSettings "$Repo\claude\settings.json" "$claude\settings.json"
-foreach ($profileDirectory in $extraClaudeProfileDirectories) {
+foreach ($profileDirectory in $extraClaudeProfileDirectories + $orcaClaudeProfileDirectories) {
     Merge-ClaudeSettings "$Repo\claude\settings.json" "$profileDirectory\settings.json"
 }
 

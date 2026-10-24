@@ -43,8 +43,8 @@ Pick the tool from the `origin` URL:
 
 | Remote | Tool |
 | --- | --- |
-| `github.com` | `gh pr create --base <base> --head <branch> --title … --body-file …` |
-| `dev.azure.com` or `visualstudio.com` | the Azure DevOps MCP pull request tools if connected, else `az repos pr create` |
+| `github.com` | the GitHub MCP `create_pull_request` tool, with `base`, `head`, `title` and `body` |
+| `dev.azure.com` or `visualstudio.com` | the Azure DevOps MCP pull request tools |
 
 If a pull request for the branch already exists, update its description instead of opening another.
 
