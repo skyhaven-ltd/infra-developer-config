@@ -8,7 +8,7 @@ The user has asked you to teach them something. This is a stateful request - the
 
 ## Teaching Workspace
 
-Treat the current directory as a teaching workspace. The state of their learning is captured in this directory in several files:
+Treat the current directory as a teaching workspace. Workspace paths (`./lessons/` and the rest) resolve from the directory `/teach` was run in; only the `*-FORMAT.md` and `starter/` links resolve from this skill's folder. The state of their learning is captured in this directory in several files:
 
 - `MISSION.md`: A document capturing the _reason_ the user is interested in the topic. This should be used to ground all teaching. Use the format in [MISSION-FORMAT.md](./MISSION-FORMAT.md).
 - `./reference/*.html`: A directory of reference materials. These are the compressed learnings from the lessons - cheat sheets, reference algorithms, syntax, yoga poses, glossaries. They are the raw units of learning. They should be beautiful documents which print out well, and are designed for quick reference.
@@ -43,6 +43,16 @@ Fluency can give the user an illusory sense of mastery, but storage strength is 
 - Spacing (distributing practice over time)
 - Interleaving (mixing up different but related topics in practice - for skills practice only)
 
+## How This User Learns
+
+These preferences apply to every lesson and reference document, in every workspace.
+
+- **Visual first.** Build every lesson around at least one diagram, drawn in inline SVG or HTML and CSS. Show the thing before describing it. When something changes over time or depends on a choice, let the user step through the diagram or change its inputs.
+- **Explain it like they're five, then go down to the ones and zeros.** Open each concept in plain language a child could follow. Then peel back the layers to what physically happens underneath: the bytes, packets, requests, records or signals. Don't stop at the level of abstraction the topic usually stops at. The user understands something only once they can see the mechanism at the bottom.
+- **Metaphors linked to what they already know.** Introduce each new concept through an everyday metaphor, or through something already in their learning records or `NOTES.md`. Say where the metaphor breaks down, so it doesn't turn into a misconception. Keep using the same metaphor for a concept across lessons, and record it in the glossary.
+
+Keep lessons short by narrowing their scope, not by skipping layers.
+
 ## Lessons
 
 A lesson is the main thing you produce: the unit in which knowledge and skills reach the user. Each lesson is one self-contained HTML file, saved to `./lessons/` and titled `0001-<dash-case-name>.html` where the number increments each time.
@@ -66,6 +76,10 @@ Lessons are built from reusable **components**, stored in `./assets/`: styleshee
 Reuse is the default, not the exception. Before authoring a lesson, read `./assets/` and build from the components already there. When a lesson needs something new and reusable, write it as a component in `./assets/` and link to it; never inline code a future lesson would duplicate.
 
 A shared stylesheet is the first component every workspace earns: every lesson links it, so the lessons look like one consistent course rather than a pile of one-offs. As the workspace grows, so should the component library.
+
+Every workspace starts from the house style in [starter](./starter/). Before the first lesson, copy `course.css`, `quiz.css` and `quiz.js` into the workspace's `./assets/`. Keep their layout, typography and components unchanged so every subject looks like the same course. To give the subject its own feel, change only `--accent` and `--accent-soft` to a hue that suits the subject: in `:root` for the light theme, and in both dark theme blocks.
+
+Build quizzes with the markup `quiz.js` expects. Use a `<section class="quiz" data-quiz-id="L0001">` holding one `<article class="q" data-id="q1" data-domain="Topic" data-answer="C">` per question. Comma-separate `data-answer` for multiple answers. Each question holds a `p.q-stem`, an `ol.q-options` of `<li data-key="A">` items, and a `div.q-why` that is revealed after answering. End the section with an empty `<div class="quiz-summary"></div>`.
 
 ## The Mission
 
@@ -106,7 +120,7 @@ For skill acquisition, difficulty is the tool. Effortful retrieval is what build
 
 Each of these should be based on a **feedback loop**, where the user receives feedback on their performance. This feedback loop should be as tight as possible, giving feedback immediately - and ideally automatically.
 
-For quizzes, each answer should be exactly the same number of words (and characters, if possible). Don't give the user any clues about the answer through formatting.
+For quizzes, each answer should be exactly the same number of words (and characters, if possible). Vary which position holds the correct answer across questions. Don't give the user any clues about the answer through formatting or order.
 
 ## Acquiring Wisdom
 

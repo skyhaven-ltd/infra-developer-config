@@ -1,0 +1,74 @@
+.quiz { margin: 1.5rem 0; }
+
+.q {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 1rem 1.1rem 1.1rem;
+  margin: 1.2rem 0;
+  background: var(--paper);
+}
+
+.q-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  margin-bottom: 0.5rem;
+}
+
+.q-stem { margin: 0 0 0.6rem; }
+
+.q-select {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin: 0 0 0.4rem;
+}
+
+.q-options { list-style: none; padding: 0; margin: 0 0 0.8rem; }
+.q-options li { margin: 0.3rem 0; }
+
+.q-options label {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.q-options label:hover { border-color: var(--ink-soft); }
+.q-options input { margin: 0; accent-color: var(--accent); flex: none; }
+.q-options .key { font-family: var(--sans); font-weight: 600; font-size: 0.8rem; flex: none; }
+
+.q.done label { cursor: default; }
+.q.done label:hover { border-color: var(--rule); }
+.q-options label.is-correct { background: var(--good-soft); border-color: var(--good); }
+.q-options label.is-wrong { background: var(--bad-soft); border-color: var(--bad); }
+
+.q-verdict { font-family: var(--sans); font-weight: 600; font-size: 0.85rem; margin: 0.6rem 0 0.3rem; }
+.q-verdict.good { color: var(--good); }
+.q-verdict.bad { color: var(--bad); }
+
+.q-why { display: none; font-size: 0.95rem; }
+.q.done .q-why { display: block; }
+.q-why > :first-child { margin-top: 0; }
+
+.quiz-summary {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 1rem 1.1rem;
+  background: var(--panel);
+  font-family: var(--sans);
+}
+.quiz-summary h3 { margin-top: 0; font-family: var(--serif); }
+.quiz-summary .total { font-size: 1.1rem; font-weight: 600; }
+.quiz-summary .actions { display: flex; gap: 0.6rem; margin-top: 0.8rem; flex-wrap: wrap; }
+
+@media print {
+  .q-why { display: block; }
+}
